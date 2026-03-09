@@ -60,21 +60,8 @@ serve(async (req) => {
         } else if (fileData) {
           try {
             const buffer = await fileData.arrayBuffer();
-            // Extract readable text from PDF by filtering printable ASCII content
-            const bytes = new Uint8Array(buffer);
-            const rawStr = new TextDecoder("latin1").decode(bytes);
-            // Extract text between BT/ET blocks (PDF text objects) or use stream content
-            const textMatches = rawStr.match(/\(([^)]+)\)/g);
-            if (textMatches && textMatches.length > 0) {
-              cvText = textMatches
-                .map((m) => m.slice(1, -1))
-                .filter((s) => s.length > 2 && /[a-zA-Z]/.test(s))
-                .join(" ");
-            }
-            if (!cvText) {
-              // Fallback: extract all printable strings
-              cvText = rawStr.replace(/[^\x20-\x7E\n]/g, " ").replace(/\s+/g, " ").trim();
-            }
+            const { text } = await extractText(new Uint8Array(buffer), { mergePages: true });
+            cvText = text || "";
           } catch (parseErr) {
             console.error("PDF parse failed:", parseErr);
             cvText = "";
