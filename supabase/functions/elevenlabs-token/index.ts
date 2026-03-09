@@ -58,7 +58,14 @@ serve(async (req) => {
         if (dlErr) {
           console.error("Failed to download CV:", dlErr);
         } else if (fileData) {
-          cvText = await fileData.text();
+          try {
+            const buffer = await fileData.arrayBuffer();
+            const pdfData = await pdf(Buffer.from(buffer));
+            cvText = pdfData.text || "";
+          } catch (parseErr) {
+            console.error("PDF parse failed, falling back to raw text:", parseErr);
+            cvText = await fileData.text();
+          }
           if (cvText.length > 4000) {
             cvText = cvText.substring(0, 4000) + "\n...[truncated]";
           }
