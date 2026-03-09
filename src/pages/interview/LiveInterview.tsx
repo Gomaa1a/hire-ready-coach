@@ -89,15 +89,16 @@ const LiveInterview = () => {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const { data, error } = await supabase.functions.invoke("elevenlabs-token");
+      const { data, error } = await supabase.functions.invoke("elevenlabs-token", {
+        body: { interviewId: id },
+      });
 
-      if (error || !data?.token) {
-        throw new Error(error?.message || "No token received");
+      if (error || !data?.signed_url) {
+        throw new Error(error?.message || "No signed URL received");
       }
 
       await conversation.startSession({
-        conversationToken: data.token,
-        connectionType: "webrtc",
+        signedUrl: data.signed_url,
       });
     } catch (error) {
       console.error("Failed to start conversation:", error);
