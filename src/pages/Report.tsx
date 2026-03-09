@@ -1,50 +1,32 @@
-import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
-// Mock report data
-const report = {
-  role: "Software Engineer",
-  level: "Junior",
-  date: "January 15, 2024",
-  overall: 78,
-  grade: "B+",
-  scores: {
-    communication: 82,
-    technical: 71,
-    confidence: 75,
-    structure: 80,
-    clarity: 78,
-    impact: 72,
-  },
-  strengths: [
-    "Clear articulation of technical concepts",
-    "Good use of specific examples with metrics",
-    "Confident tone and professional demeanor",
-  ],
-  weaknesses: [
-    "Could provide more depth on system design",
-    "Some answers lacked quantifiable outcomes",
-    "Hesitation when discussing unfamiliar topics",
-  ],
-  feedback: `You demonstrated solid communication skills and a good understanding of fundamental concepts. Your answers were generally well-structured, especially when discussing past projects. However, there's room for improvement in providing more specific metrics and diving deeper into technical details. When facing challenging questions, try to maintain confidence and use the STAR method more consistently.`,
-  roadmap: [
-    {
-      title: "Master System Design",
-      desc: "Study distributed systems, scalability patterns, and common architectures.",
-      resource: "System Design Primer",
-    },
-    {
-      title: "Practice Behavioral Questions",
-      desc: "Use STAR method for all behavioral answers. Prepare 10 stories with metrics.",
-      resource: "Behavioral Interview Guide",
-    },
-    {
-      title: "Build Confidence",
-      desc: "Practice mock interviews weekly. Record yourself and review.",
-      resource: "Mock Interview Platform",
-    },
-  ],
-};
+interface RoadmapItem {
+  title: string;
+  desc: string;
+  resource: string;
+}
+
+interface ReportData {
+  overall_score: number;
+  comm_score: number;
+  tech_score: number;
+  conf_score: number;
+  struct_score: number;
+  clarity_score: number;
+  impact_score: number;
+  strengths: string[];
+  weaknesses: string[];
+  feedback_text: string;
+  roadmap: RoadmapItem[];
+  created_at: string;
+  interview: {
+    role: string;
+    level: string;
+  } | null;
+}
 
 const getScoreColor = (score: number) => {
   if (score >= 80) return "text-success";
@@ -58,11 +40,22 @@ const getScoreBg = (score: number) => {
   return "bg-coral/20";
 };
 
+const getGrade = (score: number) => {
+  if (score >= 90) return "A+";
+  if (score >= 85) return "A";
+  if (score >= 80) return "A-";
+  if (score >= 75) return "B+";
+  if (score >= 70) return "B";
+  if (score >= 65) return "B-";
+  if (score >= 60) return "C+";
+  if (score >= 55) return "C";
+  return "C-";
+};
+
 const getGradeColor = (grade: string) => {
   if (grade.startsWith("A")) return "text-success";
   if (grade.startsWith("B")) return "text-primary";
-  if (grade.startsWith("C")) return "text-coral";
-  return "text-destructive";
+  return "text-coral";
 };
 
 const scoreEmojis: Record<string, string> = {
@@ -75,6 +68,113 @@ const scoreEmojis: Record<string, string> = {
 };
 
 const Report = () => {
+  const { id } = useParams();
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      if (!id) {
+        setError("No interview ID provided");
+        setLoading(false);
+        return;
+      }
+
+      // Poll for report (it may still be generating)
+      let attempts = 0;
+      const maxAttempts = 30;
+
+      const poll = async () => {
+        const { data, error: fetchErr } = await supabase
+          .from("reports")
+          .select("*, interviews:interview_id(role, level)")
+          .eq("interview_id", id)
+          .maybeSingle();
+
+        if (fetchErr) {
+          setError("Failed to load report");
+          setLoading(false);
+          return;
+        }
+
+        if (data) {
+          const interviewData = Array.isArray(data.interviews)
+            ? data.interviews[0]
+            : data.interviews;
+
+          setReport({
+            overall_score: data.overall_score ?? 0,
+            comm_score: data.comm_score ?? 0,
+            tech_score: data.tech_score ?? 0,
+            conf_score: data.conf_score ?? 0,
+            struct_score: data.struct_score ?? 0,
+            clarity_score: data.clarity_score ?? 0,
+            impact_score: data.impact_score ?? 0,
+            strengths: (data.strengths as string[]) ?? [],
+            weaknesses: (data.weaknesses as string[]) ?? [],
+            feedback_text: data.feedback_text ?? "",
+            roadmap: (data.roadmap as unknown as RoadmapItem[]) ?? [],
+            created_at: data.created_at,
+            interview: interviewData as { role: string; level: string } | null,
+          });
+          setLoading(false);
+          return;
+        }
+
+        attempts++;
+        if (attempts >= maxAttempts) {
+          setError("Report is taking longer than expected. Please refresh the page.");
+          setLoading(false);
+          return;
+        }
+
+        setTimeout(poll, 2000);
+      };
+
+      poll();
+    };
+
+    fetchReport();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="font-heading text-lg font-bold">Generating your AI report...</p>
+        <p className="text-sm text-muted-foreground">This usually takes 10-20 seconds</p>
+      </div>
+    );
+  }
+
+  if (error || !report) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
+        <p className="text-lg font-bold text-destructive">{error || "Report not found"}</p>
+        <Link to="/dashboard" className="neo-btn bg-primary text-primary-foreground">
+          Back to Dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  const grade = getGrade(report.overall_score);
+  const scores = {
+    communication: report.comm_score,
+    technical: report.tech_score,
+    confidence: report.conf_score,
+    structure: report.struct_score,
+    clarity: report.clarity_score,
+    impact: report.impact_score,
+  };
+
+  const formattedDate = new Date(report.created_at).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto max-w-4xl px-4 py-8">
@@ -92,10 +192,14 @@ const Report = () => {
         <div className="mb-8">
           <h1 className="mb-2 font-heading text-3xl font-extrabold">Interview Report 📊</h1>
           <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-            <span className="neo-badge bg-primary text-primary-foreground">{report.role}</span>
-            <span className="neo-badge bg-muted text-muted-foreground">{report.level}</span>
-            <span>•</span>
-            <span>{report.date}</span>
+            {report.interview && (
+              <>
+                <span className="neo-badge bg-primary text-primary-foreground">{report.interview.role}</span>
+                <span className="neo-badge bg-muted text-muted-foreground">{report.interview.level}</span>
+                <span>•</span>
+              </>
+            )}
+            <span>{formattedDate}</span>
           </div>
         </div>
 
@@ -103,15 +207,15 @@ const Report = () => {
         <div className="neo-card mb-8 bg-ink p-6 text-primary-foreground md:p-8">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
             <div className="text-center">
-              <div className={`font-heading text-7xl font-extrabold ${getGradeColor(report.grade)}`}>
-                {report.grade}
+              <div className={`font-heading text-7xl font-extrabold ${getGradeColor(grade)}`}>
+                {grade}
               </div>
-              <div className="mt-2 font-heading text-3xl font-bold">{report.overall}%</div>
+              <div className="mt-2 font-heading text-3xl font-bold">{report.overall_score}%</div>
               <div className="text-sm text-foreground/60">Overall Score</div>
             </div>
             <div className="flex-1">
               <div className="grid gap-3 sm:grid-cols-2">
-                {Object.entries(report.scores).map(([key, value]) => (
+                {Object.entries(scores).map(([key, value]) => (
                   <div key={key}>
                     <div className="mb-1 flex items-center justify-between text-sm">
                       <span className="flex items-center gap-2">
@@ -137,7 +241,7 @@ const Report = () => {
 
         {/* Score mini-cards */}
         <div className="mb-8 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {Object.entries(report.scores).map(([key, value]) => (
+          {Object.entries(scores).map(([key, value]) => (
             <div key={key} className={`neo-card p-4 text-center ${getScoreBg(value)}`}>
               <div className="text-2xl">{scoreEmojis[key]}</div>
               <div className={`font-heading text-xl font-bold ${getScoreColor(value)}`}>{value}%</div>
@@ -179,29 +283,31 @@ const Report = () => {
         {/* Detailed feedback */}
         <div className="neo-card mb-8 bg-card p-6">
           <h3 className="mb-4 font-heading text-lg font-bold">Detailed Feedback</h3>
-          <p className="text-muted-foreground leading-relaxed">{report.feedback}</p>
+          <p className="text-muted-foreground leading-relaxed">{report.feedback_text}</p>
         </div>
 
         {/* Learning roadmap */}
-        <div className="neo-card mb-8 bg-primary/10 p-6">
-          <h3 className="mb-6 flex items-center gap-2 font-heading text-lg font-bold">
-            <BookOpen className="h-5 w-5 text-primary" /> Your Learning Roadmap
-          </h3>
-          <div className="space-y-4">
-            {report.roadmap.map((item, i) => (
-              <div key={i} className="flex gap-4">
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary font-heading font-bold text-primary-foreground">
-                  {i + 1}
+        {report.roadmap.length > 0 && (
+          <div className="neo-card mb-8 bg-primary/10 p-6">
+            <h3 className="mb-6 flex items-center gap-2 font-heading text-lg font-bold">
+              <BookOpen className="h-5 w-5 text-primary" /> Your Learning Roadmap
+            </h3>
+            <div className="space-y-4">
+              {report.roadmap.map((item, i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary font-heading font-bold text-primary-foreground">
+                    {i + 1}
+                  </div>
+                  <div>
+                    <h4 className="font-heading font-bold">{item.title}</h4>
+                    <p className="mb-2 text-sm text-muted-foreground">{item.desc}</p>
+                    <span className="neo-badge bg-lime text-lime-foreground text-xs">{item.resource}</span>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-heading font-bold">{item.title}</h4>
-                  <p className="mb-2 text-sm text-muted-foreground">{item.desc}</p>
-                  <span className="neo-badge bg-lime text-lime-foreground text-xs">{item.resource}</span>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Bottom CTA */}
         <div className="neo-card bg-primary p-8 text-center text-primary-foreground">
