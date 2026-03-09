@@ -50,12 +50,14 @@ const LiveInterview = () => {
       if (message.type === "user_transcript") {
         const text = message.user_transcription_event?.user_transcript;
         if (text) {
-          setTranscript((prev) => [...prev, { role: "user", text }]);
+          const entry = { role: "user", text };
+          setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
         }
       } else if (message.type === "agent_response") {
         const text = message.agent_response_event?.agent_response;
         if (text) {
-          setTranscript((prev) => [...prev, { role: "ai", text }]);
+          const entry = { role: "ai", text };
+          setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
         }
       }
     },
