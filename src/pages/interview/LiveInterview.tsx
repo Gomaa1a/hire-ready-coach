@@ -147,9 +147,15 @@ const LiveInterview = () => {
             <h1 className="font-heading text-3xl font-bold text-primary-foreground">
               Ready for your interview?
             </h1>
+            {interviewData && (
+              <p className="text-sm font-medium text-primary">
+                {interviewData.role} · {interviewData.level}
+              </p>
+            )}
             <p className="max-w-md text-sm text-primary-foreground/60">
               This is a voice-only interview. The AI interviewer will ask questions
               and listen to your answers, just like a real Google Meet interview.
+              {interviewData && " Your CV has been shared with the interviewer."}
             </p>
             <button
               onClick={startConversation}
