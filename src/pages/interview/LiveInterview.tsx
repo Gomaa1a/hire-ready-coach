@@ -29,14 +29,14 @@ const LiveInterview = () => {
         handleEndInterview();
       }
     },
-    onMessage: (message) => {
+    onMessage: (message: any) => {
       if (message.type === "user_transcript") {
-        const text = (message as any).user_transcription_event?.user_transcript;
+        const text = message.user_transcription_event?.user_transcript;
         if (text) {
           setTranscript((prev) => [...prev, { role: "user", text }]);
         }
       } else if (message.type === "agent_response") {
-        const text = (message as any).agent_response_event?.agent_response;
+        const text = message.agent_response_event?.agent_response;
         if (text) {
           setTranscript((prev) => [...prev, { role: "ai", text }]);
         }
