@@ -114,7 +114,7 @@ const Report = () => {
             strengths: (data.strengths as string[]) ?? [],
             weaknesses: (data.weaknesses as string[]) ?? [],
             feedback_text: data.feedback_text ?? "",
-            roadmap: (data.roadmap as RoadmapItem[]) ?? [],
+            roadmap: (data.roadmap as unknown as RoadmapItem[]) ?? [],
             created_at: data.created_at,
             interview: interviewData as { role: string; level: string } | null,
           });
