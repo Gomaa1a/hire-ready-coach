@@ -4,7 +4,7 @@ import { CreditCard, CheckCircle, Trophy, Mic, ArrowRight, Lightbulb } from "luc
 import { toast } from "sonner";
 
 // Mock data - replace with real data from Supabase
-const mockCredits = 3;
+const mockCredits: number = 3;
 const mockInterviews = [
   { id: "1", role: "Software Engineer", level: "Junior", date: "2024-01-15", score: 78 },
   { id: "2", role: "Product Manager", level: "Mid-level", date: "2024-01-12", score: 85 },

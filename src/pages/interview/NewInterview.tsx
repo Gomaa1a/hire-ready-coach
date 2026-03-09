@@ -25,7 +25,7 @@ const levels = [
 ];
 
 // Mock credits - will be replaced with Supabase
-const mockCredits = 3;
+const mockCredits: number = 3;
 
 const NewInterview = () => {
   const navigate = useNavigate();
