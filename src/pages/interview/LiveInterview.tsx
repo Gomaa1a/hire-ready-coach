@@ -93,26 +93,20 @@ const LiveInterview = () => {
         body: { interviewId: id },
       });
 
-      if (error || !data?.signed_url) {
-        throw new Error(error?.message || "No signed URL received");
+      if (error || !data?.token) {
+        throw new Error(error?.message || "No token received");
       }
 
-      const sessionOpts: any = {
-        signedUrl: data.signed_url,
-      };
+      // Use WebRTC with conversation token (recommended for best audio quality)
+      await conversation.startSession({
+        conversationToken: data.token,
+        connectionType: "webrtc",
+      });
 
-      // Pass CV context as prompt override if available
+      // Send CV context as a contextual update (doesn't replace agent prompt)
       if (data.cvContext) {
-        sessionOpts.overrides = {
-          agent: {
-            prompt: {
-              prompt: data.cvContext,
-            },
-          },
-        };
+        conversation.sendContextualUpdate(data.cvContext);
       }
-
-      await conversation.startSession(sessionOpts);
     } catch (error) {
       console.error("Failed to start conversation:", error);
       toast.error("Failed to connect. Please check microphone permissions.");

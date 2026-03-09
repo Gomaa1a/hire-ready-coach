@@ -1,12 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { extractText, getDocumentProxy } from "npm:unpdf@0.12.1";
+import { extractText } from "npm:unpdf@0.12.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const agentId = "agent_9501kk894erbfhqsp9erm8qkpzxw";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -22,15 +24,12 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const agentId = "agent_9501kk894erbfhqsp9erm8qkpzxw";
-
-    // Parse request body for interviewId
     let interviewId: string | null = null;
     try {
       const body = await req.json();
       interviewId = body.interviewId || null;
     } catch {
-      // No body — proceed without CV context
+      // No body
     }
 
     let cvContext = "";
@@ -64,7 +63,6 @@ serve(async (req) => {
             cvText = text || "";
           } catch (parseErr) {
             console.error("PDF parse failed:", parseErr);
-            cvText = "";
           }
           if (cvText.length > 4000) {
             cvText = cvText.substring(0, 4000) + "\n...[truncated]";
@@ -83,25 +81,25 @@ serve(async (req) => {
       ].join("\n\n");
     }
 
-    // Get signed URL (GET endpoint)
-    const url = new URL("https://api.elevenlabs.io/v1/convai/conversation/get-signed-url");
-    url.searchParams.set("agent_id", agentId);
-
-    const response = await fetch(url.toString(), {
-      headers: {
-        "xi-api-key": ELEVENLABS_API_KEY,
-      },
-    });
+    // Get conversation token (for WebRTC - recommended)
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agentId}`,
+      {
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY,
+        },
+      }
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      console.error("ElevenLabs signed URL error:", response.status, text);
-      throw new Error(`Failed to get signed URL: ${response.status}`);
+      console.error("ElevenLabs token error:", response.status, text);
+      throw new Error(`Failed to get token: ${response.status}`);
     }
 
-    const { signed_url } = await response.json();
+    const { token } = await response.json();
 
-    return new Response(JSON.stringify({ signed_url, cvContext }), {
+    return new Response(JSON.stringify({ token, cvContext }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
