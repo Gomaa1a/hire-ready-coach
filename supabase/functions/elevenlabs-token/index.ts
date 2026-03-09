@@ -59,20 +59,24 @@ serve(async (req) => {
         } else if (fileData) {
           try {
             const buffer = await fileData.arrayBuffer();
-            const pdfDoc = await getDocumentProxy(new Uint8Array(buffer));
-            const textParts: string[] = [];
-            for (let i = 1; i <= pdfDoc.numPages; i++) {
-              const page = await pdfDoc.getPage(i);
-              const content = await page.getTextContent();
-              const pageText = content.items
-                .map((item: any) => item.str)
+            // Extract readable text from PDF by filtering printable ASCII content
+            const bytes = new Uint8Array(buffer);
+            const rawStr = new TextDecoder("latin1").decode(bytes);
+            // Extract text between BT/ET blocks (PDF text objects) or use stream content
+            const textMatches = rawStr.match(/\(([^)]+)\)/g);
+            if (textMatches && textMatches.length > 0) {
+              cvText = textMatches
+                .map((m) => m.slice(1, -1))
+                .filter((s) => s.length > 2 && /[a-zA-Z]/.test(s))
                 .join(" ");
-              textParts.push(pageText);
             }
-            cvText = textParts.join("\n");
+            if (!cvText) {
+              // Fallback: extract all printable strings
+              cvText = rawStr.replace(/[^\x20-\x7E\n]/g, " ").replace(/\s+/g, " ").trim();
+            }
           } catch (parseErr) {
-            console.error("PDF parse failed, falling back to raw text:", parseErr);
-            cvText = await fileData.text();
+            console.error("PDF parse failed:", parseErr);
+            cvText = "";
           }
           if (cvText.length > 4000) {
             cvText = cvText.substring(0, 4000) + "\n...[truncated]";
