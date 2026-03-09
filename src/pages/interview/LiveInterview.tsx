@@ -120,13 +120,17 @@ const LiveInterview = () => {
   }, [conversation]);
 
   const handleEndInterview = useCallback(async () => {
+    if (endingRef.current) return;
+    endingRef.current = true;
     conversation.endSession();
     toast.success("Great work! Saving transcript...");
 
+    const currentTranscript = transcriptRef.current;
+
     // Save transcript to messages table
-    if (id && transcript.length > 0) {
+    if (id && currentTranscript.length > 0) {
       try {
-        const msgs = transcript.map((t) => ({
+        const msgs = currentTranscript.map((t) => ({
           interview_id: id,
           role: t.role === "ai" ? "assistant" : "user",
           content: t.text,
@@ -145,22 +149,24 @@ const LiveInterview = () => {
         .update({ status: "completed", ended_at: new Date().toISOString() })
         .eq("id", id);
 
-      // Generate AI report
-      toast.info("Generating your AI report...");
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { error: reportErr } = await supabase.functions.invoke("generate-report", {
-          body: { interviewId: id, userId: user.id },
-        });
-        if (reportErr) {
-          console.error("Report generation failed:", reportErr);
-          toast.error("Report generation failed. You can retry from the dashboard.");
+      // Generate AI report only if we have transcript
+      if (currentTranscript.length > 0) {
+        toast.info("Generating your AI report...");
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { error: reportErr } = await supabase.functions.invoke("generate-report", {
+            body: { interviewId: id, userId: user.id },
+          });
+          if (reportErr) {
+            console.error("Report generation failed:", reportErr);
+            toast.error("Report generation failed. You can retry from the dashboard.");
+          }
         }
       }
     }
 
     navigate(`/report/${id || "demo"}`);
-  }, [conversation, navigate, id, transcript]);
+  }, [conversation, navigate, id]);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => !prev);
