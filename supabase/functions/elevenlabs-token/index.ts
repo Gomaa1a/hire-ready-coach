@@ -60,8 +60,17 @@ serve(async (req) => {
         } else if (fileData) {
           try {
             const buffer = await fileData.arrayBuffer();
-            const pdfData = await pdf(Buffer.from(buffer));
-            cvText = pdfData.text || "";
+            const pdfDoc = await getDocumentProxy(new Uint8Array(buffer));
+            const textParts: string[] = [];
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+              const page = await pdfDoc.getPage(i);
+              const content = await page.getTextContent();
+              const pageText = content.items
+                .map((item: any) => item.str)
+                .join(" ");
+              textParts.push(pageText);
+            }
+            cvText = textParts.join("\n");
           } catch (parseErr) {
             console.error("PDF parse failed, falling back to raw text:", parseErr);
             cvText = await fileData.text();
