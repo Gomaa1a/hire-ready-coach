@@ -28,11 +28,11 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth/login" element={<Login />} />
             <Route path="/auth/signup" element={<Signup />} />
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/interview/new" element={<ProtectedRoute><NewInterview /></ProtectedRoute>} />
-            <Route path="/interview/:id" element={<ProtectedRoute><LiveInterview /></ProtectedRoute>} />
-            <Route path="/report/:id" element={<ProtectedRoute><Report /></ProtectedRoute>} />
-            <Route path="/pricing" element={<ProtectedRoute><Pricing /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute children={<Dashboard />} />} />
+            <Route path="/interview/new" element={<ProtectedRoute children={<NewInterview />} />} />
+            <Route path="/interview/:id" element={<ProtectedRoute children={<LiveInterview />} />} />
+            <Route path="/report/:id" element={<ProtectedRoute children={<Report />} />} />
+            <Route path="/pricing" element={<ProtectedRoute children={<Pricing />} />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
