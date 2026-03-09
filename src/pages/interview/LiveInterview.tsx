@@ -15,8 +15,10 @@ const LiveInterview = () => {
   const [timeLeft, setTimeLeft] = useState(900);
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
+  const transcriptRef = useRef<{ role: string; text: string }[]>([]);
   const [interviewData, setInterviewData] = useState<{ role: string; level: string } | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const endingRef = useRef(false);
 
   // Fetch interview details on mount
   useEffect(() => {
@@ -48,12 +50,14 @@ const LiveInterview = () => {
       if (message.type === "user_transcript") {
         const text = message.user_transcription_event?.user_transcript;
         if (text) {
-          setTranscript((prev) => [...prev, { role: "user", text }]);
+          const entry = { role: "user", text };
+          setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
         }
       } else if (message.type === "agent_response") {
         const text = message.agent_response_event?.agent_response;
         if (text) {
-          setTranscript((prev) => [...prev, { role: "ai", text }]);
+          const entry = { role: "ai", text };
+          setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
         }
       }
     },
@@ -116,13 +120,17 @@ const LiveInterview = () => {
   }, [conversation]);
 
   const handleEndInterview = useCallback(async () => {
+    if (endingRef.current) return;
+    endingRef.current = true;
     conversation.endSession();
     toast.success("Great work! Saving transcript...");
 
+    const currentTranscript = transcriptRef.current;
+
     // Save transcript to messages table
-    if (id && transcript.length > 0) {
+    if (id && currentTranscript.length > 0) {
       try {
-        const msgs = transcript.map((t) => ({
+        const msgs = currentTranscript.map((t) => ({
           interview_id: id,
           role: t.role === "ai" ? "assistant" : "user",
           content: t.text,
@@ -141,22 +149,24 @@ const LiveInterview = () => {
         .update({ status: "completed", ended_at: new Date().toISOString() })
         .eq("id", id);
 
-      // Generate AI report
-      toast.info("Generating your AI report...");
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { error: reportErr } = await supabase.functions.invoke("generate-report", {
-          body: { interviewId: id, userId: user.id },
-        });
-        if (reportErr) {
-          console.error("Report generation failed:", reportErr);
-          toast.error("Report generation failed. You can retry from the dashboard.");
+      // Generate AI report only if we have transcript
+      if (currentTranscript.length > 0) {
+        toast.info("Generating your AI report...");
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { error: reportErr } = await supabase.functions.invoke("generate-report", {
+            body: { interviewId: id, userId: user.id },
+          });
+          if (reportErr) {
+            console.error("Report generation failed:", reportErr);
+            toast.error("Report generation failed. You can retry from the dashboard.");
+          }
         }
       }
     }
 
     navigate(`/report/${id || "demo"}`);
-  }, [conversation, navigate, id, transcript]);
+  }, [conversation, navigate, id]);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => !prev);
