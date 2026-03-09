@@ -15,7 +15,22 @@ const LiveInterview = () => {
   const [timeLeft, setTimeLeft] = useState(900);
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
+  const [interviewData, setInterviewData] = useState<{ role: string; level: string } | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch interview details on mount
+  useEffect(() => {
+    if (!id) return;
+    const fetchInterview = async () => {
+      const { data } = await supabase
+        .from("interviews")
+        .select("role, level")
+        .eq("id", id)
+        .single();
+      if (data) setInterviewData(data);
+    };
+    fetchInterview();
+  }, [id]);
 
   const conversation = useConversation({
     onConnect: () => {
@@ -74,15 +89,16 @@ const LiveInterview = () => {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const { data, error } = await supabase.functions.invoke("elevenlabs-token");
+      const { data, error } = await supabase.functions.invoke("elevenlabs-token", {
+        body: { interviewId: id },
+      });
 
-      if (error || !data?.token) {
-        throw new Error(error?.message || "No token received");
+      if (error || !data?.signed_url) {
+        throw new Error(error?.message || "No signed URL received");
       }
 
       await conversation.startSession({
-        conversationToken: data.token,
-        connectionType: "webrtc",
+        signedUrl: data.signed_url,
       });
     } catch (error) {
       console.error("Failed to start conversation:", error);
@@ -131,9 +147,15 @@ const LiveInterview = () => {
             <h1 className="font-heading text-3xl font-bold text-primary-foreground">
               Ready for your interview?
             </h1>
+            {interviewData && (
+              <p className="text-sm font-medium text-primary">
+                {interviewData.role} · {interviewData.level}
+              </p>
+            )}
             <p className="max-w-md text-sm text-primary-foreground/60">
               This is a voice-only interview. The AI interviewer will ask questions
               and listen to your answers, just like a real Google Meet interview.
+              {interviewData && " Your CV has been shared with the interviewer."}
             </p>
             <button
               onClick={startConversation}
