@@ -123,16 +123,17 @@ const LiveInterview = () => {
 
   const handleEndInterview = useCallback(async () => {
     conversation.endSession();
+    toast.success("Great work! Saving transcript...");
 
     // Save transcript to messages table
     if (id && transcript.length > 0) {
       try {
-        const messages = transcript.map((t) => ({
+        const msgs = transcript.map((t) => ({
           interview_id: id,
           role: t.role === "ai" ? "assistant" : "user",
           content: t.text,
         }));
-        const { error } = await supabase.from("messages").insert(messages);
+        const { error } = await supabase.from("messages").insert(msgs);
         if (error) console.error("Failed to save transcript:", error);
       } catch (err) {
         console.error("Error saving transcript:", err);
@@ -145,9 +146,21 @@ const LiveInterview = () => {
         .from("interviews")
         .update({ status: "completed", ended_at: new Date().toISOString() })
         .eq("id", id);
+
+      // Generate AI report
+      toast.info("Generating your AI report...");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { error: reportErr } = await supabase.functions.invoke("generate-report", {
+          body: { interviewId: id, userId: user.id },
+        });
+        if (reportErr) {
+          console.error("Report generation failed:", reportErr);
+          toast.error("Report generation failed. You can retry from the dashboard.");
+        }
+      }
     }
 
-    toast.success("Great work! Generating your report...");
     navigate(`/report/${id || "demo"}`);
   }, [conversation, navigate, id, transcript]);
 
