@@ -97,9 +97,22 @@ const LiveInterview = () => {
         throw new Error(error?.message || "No signed URL received");
       }
 
-      await conversation.startSession({
+      const sessionOpts: any = {
         signedUrl: data.signed_url,
-      });
+      };
+
+      // Pass CV context as prompt override if available
+      if (data.cvContext) {
+        sessionOpts.overrides = {
+          agent: {
+            prompt: {
+              prompt: data.cvContext,
+            },
+          },
+        };
+      }
+
+      await conversation.startSession(sessionOpts);
     } catch (error) {
       console.error("Failed to start conversation:", error);
       toast.error("Failed to connect. Please check microphone permissions.");
