@@ -15,8 +15,10 @@ const LiveInterview = () => {
   const [timeLeft, setTimeLeft] = useState(900);
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
+  const transcriptRef = useRef<{ role: string; text: string }[]>([]);
   const [interviewData, setInterviewData] = useState<{ role: string; level: string } | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const endingRef = useRef(false);
 
   // Fetch interview details on mount
   useEffect(() => {
