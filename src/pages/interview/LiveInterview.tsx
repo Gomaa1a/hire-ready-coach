@@ -46,19 +46,15 @@ const LiveInterview = () => {
         handleEndInterview();
       }
     },
-    onMessage: (message: any) => {
-      if (message.type === "user_transcript") {
-        const text = message.user_transcription_event?.user_transcript;
-        if (text) {
-          const entry = { role: "user", text };
-          setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
-        }
-      } else if (message.type === "agent_response") {
-        const text = message.agent_response_event?.agent_response;
-        if (text) {
-          const entry = { role: "ai", text };
-          setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
-        }
+    onMessage: (props: { message: string; source: string }) => {
+      const { message, source } = props;
+      if (message) {
+        const entry = { role: source === "ai" ? "ai" : "user", text: message };
+        setTranscript((prev) => {
+          const next = [...prev, entry];
+          transcriptRef.current = next;
+          return next;
+        });
       }
     },
     onError: (error) => {
