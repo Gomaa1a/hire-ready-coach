@@ -15,7 +15,22 @@ const LiveInterview = () => {
   const [timeLeft, setTimeLeft] = useState(900);
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
+  const [interviewData, setInterviewData] = useState<{ role: string; level: string } | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch interview details on mount
+  useEffect(() => {
+    if (!id) return;
+    const fetchInterview = async () => {
+      const { data } = await supabase
+        .from("interviews")
+        .select("role, level")
+        .eq("id", id)
+        .single();
+      if (data) setInterviewData(data);
+    };
+    fetchInterview();
+  }, [id]);
 
   const conversation = useConversation({
     onConnect: () => {
