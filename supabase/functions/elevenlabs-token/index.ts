@@ -29,15 +29,14 @@ serve(async (req) => {
       const body = await req.json();
       interviewId = body.interviewId || null;
     } catch {
-      // No body or invalid JSON — proceed without CV context
+      // No body — proceed without CV context
     }
 
-    let conversationConfigOverride: Record<string, any> | undefined;
+    let cvContext = "";
 
     if (interviewId) {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-      // Fetch interview record
       const { data: interview, error: intErr } = await supabase
         .from("interviews")
         .select("role, level, cv_url")
@@ -51,7 +50,6 @@ serve(async (req) => {
       let cvText = "";
 
       if (interview?.cv_url) {
-        // cv_url is the storage path inside the 'cvs' bucket
         const { data: fileData, error: dlErr } = await supabase.storage
           .from("cvs")
           .download(interview.cv_url);
@@ -60,7 +58,6 @@ serve(async (req) => {
           console.error("Failed to download CV:", dlErr);
         } else if (fileData) {
           cvText = await fileData.text();
-          // Truncate to ~4000 chars to stay within prompt limits
           if (cvText.length > 4000) {
             cvText = cvText.substring(0, 4000) + "\n...[truncated]";
           }
@@ -70,49 +67,33 @@ serve(async (req) => {
       const role = interview?.role || "Unknown";
       const level = interview?.level || "Unknown";
 
-      const contextPrompt = [
+      cvContext = [
         `The candidate is interviewing for the role of ${role} at ${level} level.`,
         cvText
           ? `Here is the candidate's CV/resume content:\n\n${cvText}\n\nUse this CV to ask relevant, personalized questions about their experience, projects, and skills.`
           : "No CV was provided for this candidate.",
       ].join("\n\n");
-
-      conversationConfigOverride = {
-        agent: {
-          prompt: {
-            prompt: contextPrompt,
-          },
-        },
-      };
     }
 
-    // Request conversation token from ElevenLabs
-    const elBody: Record<string, any> = { agent_id: agentId };
-    if (conversationConfigOverride) {
-      elBody.conversation_config_override = conversationConfigOverride;
-    }
+    // Get signed URL (GET endpoint)
+    const url = new URL("https://api.elevenlabs.io/v1/convai/conversation/get-signed-url");
+    url.searchParams.set("agent_id", agentId);
 
-    const response = await fetch(
-      "https://api.elevenlabs.io/v1/convai/conversation/get_signed_url",
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": ELEVENLABS_API_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(elBody),
-      }
-    );
+    const response = await fetch(url.toString(), {
+      headers: {
+        "xi-api-key": ELEVENLABS_API_KEY,
+      },
+    });
 
     if (!response.ok) {
       const text = await response.text();
-      console.error("ElevenLabs token error:", response.status, text);
-      throw new Error(`Failed to get token: ${response.status}`);
+      console.error("ElevenLabs signed URL error:", response.status, text);
+      throw new Error(`Failed to get signed URL: ${response.status}`);
     }
 
-    const data = await response.json();
+    const { signed_url } = await response.json();
 
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify({ signed_url, cvContext }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
