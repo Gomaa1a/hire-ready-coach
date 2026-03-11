@@ -31,10 +31,14 @@ const NewInterview = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [customRole, setCustomRole] = useState("");
+  const [isOtherRole, setIsOtherRole] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [credits, setCredits] = useState<number>(0);
   const [starting, setStarting] = useState(false);
+
+  const effectiveRole = isOtherRole ? customRole.trim() : selectedRole;
 
   useEffect(() => {
     if (!user) return;
