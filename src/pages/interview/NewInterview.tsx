@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, ArrowRight, Check, Upload, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Upload, AlertCircle, PenLine } from "lucide-react";
 import { toast } from "sonner";
 
 const roles = [
