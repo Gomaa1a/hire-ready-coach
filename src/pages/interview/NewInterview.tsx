@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, ArrowRight, Check, Upload, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Upload, AlertCircle, PenLine } from "lucide-react";
 import { toast } from "sonner";
 
 const roles = [
@@ -31,10 +31,14 @@ const NewInterview = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [customRole, setCustomRole] = useState("");
+  const [isOtherRole, setIsOtherRole] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [credits, setCredits] = useState<number>(0);
   const [starting, setStarting] = useState(false);
+
+  const effectiveRole = isOtherRole ? customRole.trim() : selectedRole;
 
   useEffect(() => {
     if (!user) return;
@@ -44,7 +48,7 @@ const NewInterview = () => {
   }, [user]);
 
   const handleStartInterview = async () => {
-    if (!user || !selectedRole || !selectedLevel) return;
+    if (!user || !effectiveRole || !selectedLevel) return;
     if (credits <= 0) {
       toast.error("You're out of credits!");
       return;
@@ -81,7 +85,7 @@ const NewInterview = () => {
       .from("interviews")
       .insert({
         user_id: user.id,
-        role: selectedRole,
+        role: effectiveRole!,
         level: selectedLevel,
         status: "active",
         cv_url: cvUrl,
@@ -99,7 +103,7 @@ const NewInterview = () => {
     navigate(`/interview/${interview.id}`);
   };
 
-  const roleLabel = roles.find((r) => r.id === selectedRole)?.label;
+  const roleLabel = isOtherRole ? customRole.trim() : roles.find((r) => r.id === selectedRole)?.label;
   const levelLabel = levels.find((l) => l.id === selectedLevel)?.label;
 
   return (
@@ -136,18 +140,39 @@ const NewInterview = () => {
               {roles.map((role) => (
                 <button
                   key={role.id}
-                  onClick={() => setSelectedRole(role.id)}
+                  onClick={() => { setSelectedRole(role.id); setIsOtherRole(false); }}
                   className={`neo-card flex items-center gap-3 p-4 text-left transition-all hover:-translate-y-1 ${
-                    selectedRole === role.id ? "border-primary bg-primary/10 ring-2 ring-primary" : "bg-card hover:bg-muted"
+                    selectedRole === role.id && !isOtherRole ? "border-primary bg-primary/10 ring-2 ring-primary" : "bg-card hover:bg-muted"
                   }`}
-                  style={{ boxShadow: selectedRole === role.id ? "5px 5px 0 hsl(var(--primary))" : "5px 5px 0 hsl(var(--ink))" }}
+                  style={{ boxShadow: selectedRole === role.id && !isOtherRole ? "5px 5px 0 hsl(var(--primary))" : "5px 5px 0 hsl(var(--ink))" }}
                 >
                   <span className="text-2xl">{role.emoji}</span>
-                  <span className={`font-heading font-bold ${selectedRole === role.id ? "text-primary" : ""}`}>{role.label}</span>
+                  <span className={`font-heading font-bold ${selectedRole === role.id && !isOtherRole ? "text-primary" : ""}`}>{role.label}</span>
                 </button>
               ))}
+              <button
+                onClick={() => { setIsOtherRole(true); setSelectedRole(null); }}
+                className={`neo-card flex items-center gap-3 p-4 text-left transition-all hover:-translate-y-1 ${
+                  isOtherRole ? "border-primary bg-primary/10 ring-2 ring-primary" : "bg-card hover:bg-muted"
+                }`}
+                style={{ boxShadow: isOtherRole ? "5px 5px 0 hsl(var(--primary))" : "5px 5px 0 hsl(var(--ink))" }}
+              >
+                <span className="text-2xl"><PenLine className="h-6 w-6" /></span>
+                <span className={`font-heading font-bold ${isOtherRole ? "text-primary" : ""}`}>Other</span>
+              </button>
             </div>
-            <button onClick={() => setStep(2)} disabled={!selectedRole} className="neo-btn bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">
+            {isOtherRole && (
+              <div className="mb-8">
+                <input
+                  type="text"
+                  value={customRole}
+                  onChange={(e) => setCustomRole(e.target.value)}
+                  placeholder="Type your role (e.g. Sales Manager)"
+                  className="neo-card w-full border-2 border-ink bg-card p-4 font-heading font-bold placeholder:font-normal placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            )}
+            <button onClick={() => setStep(2)} disabled={!effectiveRole} className="neo-btn bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">
               Continue <ArrowRight className="h-4 w-4" />
             </button>
           </div>
