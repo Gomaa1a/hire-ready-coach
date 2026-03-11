@@ -7,6 +7,36 @@ import { supabase } from "@/integrations/supabase/client";
 import VoiceVisualizer from "@/components/interview/VoiceVisualizer";
 import InterviewTopBar from "@/components/interview/InterviewTopBar";
 
+type TranscriptEntry = { role: "ai" | "user"; text: string };
+
+const parseTranscriptMessage = (payload: unknown): TranscriptEntry | null => {
+  if (!payload) return null;
+
+  if (typeof payload === "string") {
+    const text = payload.trim();
+    return text ? { role: "ai", text } : null;
+  }
+
+  if (typeof payload !== "object") return null;
+
+  const data = payload as Record<string, unknown>;
+  const nested =
+    data.message && typeof data.message === "object"
+      ? (data.message as Record<string, unknown>)
+      : null;
+
+  const textCandidate =
+    data.message ?? data.text ?? data.content ?? nested?.message ?? nested?.text ?? nested?.content;
+
+  if (typeof textCandidate !== "string" || !textCandidate.trim()) return null;
+
+  const roleCandidate = data.role ?? data.source ?? nested?.role ?? nested?.source;
+  const role =
+    roleCandidate === "agent" || roleCandidate === "ai" ? "ai" : "user";
+
+  return { role, text: textCandidate.trim() };
+};
+
 const LiveInterview = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -14,8 +44,8 @@ const LiveInterview = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(900);
   const [interviewStarted, setInterviewStarted] = useState(false);
-  const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
-  const transcriptRef = useRef<{ role: string; text: string }[]>([]);
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const transcriptRef = useRef<TranscriptEntry[]>([]);
   const [interviewData, setInterviewData] = useState<{ role: string; level: string } | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
