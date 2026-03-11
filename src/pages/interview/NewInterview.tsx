@@ -140,18 +140,39 @@ const NewInterview = () => {
               {roles.map((role) => (
                 <button
                   key={role.id}
-                  onClick={() => setSelectedRole(role.id)}
+                  onClick={() => { setSelectedRole(role.id); setIsOtherRole(false); }}
                   className={`neo-card flex items-center gap-3 p-4 text-left transition-all hover:-translate-y-1 ${
-                    selectedRole === role.id ? "border-primary bg-primary/10 ring-2 ring-primary" : "bg-card hover:bg-muted"
+                    selectedRole === role.id && !isOtherRole ? "border-primary bg-primary/10 ring-2 ring-primary" : "bg-card hover:bg-muted"
                   }`}
-                  style={{ boxShadow: selectedRole === role.id ? "5px 5px 0 hsl(var(--primary))" : "5px 5px 0 hsl(var(--ink))" }}
+                  style={{ boxShadow: selectedRole === role.id && !isOtherRole ? "5px 5px 0 hsl(var(--primary))" : "5px 5px 0 hsl(var(--ink))" }}
                 >
                   <span className="text-2xl">{role.emoji}</span>
-                  <span className={`font-heading font-bold ${selectedRole === role.id ? "text-primary" : ""}`}>{role.label}</span>
+                  <span className={`font-heading font-bold ${selectedRole === role.id && !isOtherRole ? "text-primary" : ""}`}>{role.label}</span>
                 </button>
               ))}
+              <button
+                onClick={() => { setIsOtherRole(true); setSelectedRole(null); }}
+                className={`neo-card flex items-center gap-3 p-4 text-left transition-all hover:-translate-y-1 ${
+                  isOtherRole ? "border-primary bg-primary/10 ring-2 ring-primary" : "bg-card hover:bg-muted"
+                }`}
+                style={{ boxShadow: isOtherRole ? "5px 5px 0 hsl(var(--primary))" : "5px 5px 0 hsl(var(--ink))" }}
+              >
+                <span className="text-2xl"><PenLine className="h-6 w-6" /></span>
+                <span className={`font-heading font-bold ${isOtherRole ? "text-primary" : ""}`}>Other</span>
+              </button>
             </div>
-            <button onClick={() => setStep(2)} disabled={!selectedRole} className="neo-btn bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">
+            {isOtherRole && (
+              <div className="mb-8">
+                <input
+                  type="text"
+                  value={customRole}
+                  onChange={(e) => setCustomRole(e.target.value)}
+                  placeholder="Type your role (e.g. Sales Manager)"
+                  className="neo-card w-full border-2 border-ink bg-card p-4 font-heading font-bold placeholder:font-normal placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            )}
+            <button onClick={() => setStep(2)} disabled={!effectiveRole} className="neo-btn bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">
               Continue <ArrowRight className="h-4 w-4" />
             </button>
           </div>
