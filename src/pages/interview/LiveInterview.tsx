@@ -76,16 +76,15 @@ const LiveInterview = () => {
         handleEndInterview();
       }
     },
-    onMessage: (props: { message: string; source: string }) => {
-      const { message, source } = props;
-      if (message) {
-        const entry = { role: source === "ai" ? "ai" : "user", text: message };
-        setTranscript((prev) => {
-          const next = [...prev, entry];
-          transcriptRef.current = next;
-          return next;
-        });
-      }
+    onMessage: (payload) => {
+      const entry = parseTranscriptMessage(payload);
+      if (!entry) return;
+
+      setTranscript((prev) => {
+        const next = [...prev, entry];
+        transcriptRef.current = next;
+        return next;
+      });
     },
     onError: (error) => {
       console.error("Conversation error:", error);

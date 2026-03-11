@@ -20,11 +20,11 @@ const plans = [
     highlight: true,
   },
   {
-    name: "Unlimited",
+    name: "Scale",
     price: "$29",
     period: "/month",
-    credits: "Unlimited",
-    features: ["Everything in Pro", "Unlimited interviews", "Score history", "Shareable cards"],
+    credits: "30 interviews / month",
+    features: ["Everything in Pro", "30 interviews every month", "Score history", "Shareable cards"],
     highlight: false,
   },
 ];
