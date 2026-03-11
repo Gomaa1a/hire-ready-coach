@@ -85,7 +85,7 @@ const NewInterview = () => {
       .from("interviews")
       .insert({
         user_id: user.id,
-        role: selectedRole,
+        role: effectiveRole!,
         level: selectedLevel,
         status: "active",
         cv_url: cvUrl,
