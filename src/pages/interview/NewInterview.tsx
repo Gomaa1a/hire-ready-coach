@@ -103,7 +103,7 @@ const NewInterview = () => {
     navigate(`/interview/${interview.id}`);
   };
 
-  const roleLabel = roles.find((r) => r.id === selectedRole)?.label;
+  const roleLabel = isOtherRole ? customRole.trim() : roles.find((r) => r.id === selectedRole)?.label;
   const levelLabel = levels.find((l) => l.id === selectedLevel)?.label;
 
   return (
