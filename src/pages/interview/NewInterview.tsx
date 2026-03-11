@@ -48,7 +48,7 @@ const NewInterview = () => {
   }, [user]);
 
   const handleStartInterview = async () => {
-    if (!user || !selectedRole || !selectedLevel) return;
+    if (!user || !effectiveRole || !selectedLevel) return;
     if (credits <= 0) {
       toast.error("You're out of credits!");
       return;
