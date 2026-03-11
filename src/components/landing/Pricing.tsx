@@ -6,7 +6,7 @@ const plans = [
     name: "Free",
     price: "$0",
     period: "",
-    credits: "3 interviews",
+    credits: "1 interview",
     features: ["AI interviewer", "Voice input", "Basic report", "1 role"],
     cta: "Get Started",
     highlight: false,
