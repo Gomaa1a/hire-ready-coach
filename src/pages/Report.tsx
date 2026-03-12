@@ -310,6 +310,17 @@ const Report = () => {
           </div>
         )}
 
+        {/* Share Results */}
+        <ShareResults
+          overallScore={report.overall_score}
+          confScore={report.conf_score}
+          clarityScore={report.clarity_score}
+          structScore={report.struct_score}
+          commScore={report.comm_score}
+          role={report.interview?.role ?? "General"}
+          date={formattedDate}
+        />
+
         {/* Bottom CTA */}
         <div className="neo-card bg-primary p-8 text-center text-primary-foreground">
           <h3 className="mb-2 font-heading text-2xl font-bold">Ready to improve your score?</h3>
