@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import ShareResults from "@/components/report/ShareResults";
 
 interface RoadmapItem {
   title: string;
