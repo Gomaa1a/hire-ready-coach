@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import ShareResults from "@/components/report/ShareResults";
 
 interface RoadmapItem {
   title: string;
@@ -308,6 +309,17 @@ const Report = () => {
             </div>
           </div>
         )}
+
+        {/* Share Results */}
+        <ShareResults
+          overallScore={report.overall_score}
+          confScore={report.conf_score}
+          clarityScore={report.clarity_score}
+          structScore={report.struct_score}
+          commScore={report.comm_score}
+          role={report.interview?.role ?? "General"}
+          date={formattedDate}
+        />
 
         {/* Bottom CTA */}
         <div className="neo-card bg-primary p-8 text-center text-primary-foreground">
