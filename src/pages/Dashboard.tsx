@@ -45,12 +45,18 @@ const Dashboard = () => {
       // Fetch reports for scores
       const { data: reportData } = await supabase
         .from("reports")
-        .select("interview_id, overall_score")
+        .select("interview_id, overall_score, conf_score, clarity_score, struct_score, comm_score")
         .eq("user_id", user.id);
       if (reportData) {
-        const map: Record<string, number> = {};
+        const map: Record<string, { overall_score: number; conf_score: number; clarity_score: number; struct_score: number; comm_score: number }> = {};
         reportData.forEach((r) => {
-          if (r.overall_score !== null) map[r.interview_id] = r.overall_score;
+          if (r.overall_score !== null) map[r.interview_id] = {
+            overall_score: r.overall_score ?? 0,
+            conf_score: r.conf_score ?? 0,
+            clarity_score: r.clarity_score ?? 0,
+            struct_score: r.struct_score ?? 0,
+            comm_score: r.comm_score ?? 0,
+          };
         });
         setReports(map);
       }
