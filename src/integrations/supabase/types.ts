@@ -136,20 +136,85 @@ export type Database = {
           created_at: string
           full_name: string | null
           id: string
+          used_promo_code: string | null
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
           full_name?: string | null
           id: string
+          used_promo_code?: string | null
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
+          used_promo_code?: string | null
         }
         Relationships: []
+      }
+      promo_codes: {
+        Row: {
+          code: string
+          commission_percent: number
+          created_at: string
+          discount_percent: number
+          id: string
+          is_active: boolean
+          owner_email: string | null
+          owner_name: string
+        }
+        Insert: {
+          code: string
+          commission_percent?: number
+          created_at?: string
+          discount_percent?: number
+          id?: string
+          is_active?: boolean
+          owner_email?: string | null
+          owner_name: string
+        }
+        Update: {
+          code?: string
+          commission_percent?: number
+          created_at?: string
+          discount_percent?: number
+          id?: string
+          is_active?: boolean
+          owner_email?: string | null
+          owner_name?: string
+        }
+        Relationships: []
+      }
+      referral_signups: {
+        Row: {
+          created_at: string
+          id: string
+          promo_code_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          promo_code_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          promo_code_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_signups_promo_code_id_fkey"
+            columns: ["promo_code_id"]
+            isOneToOne: false
+            referencedRelation: "promo_codes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reports: {
         Row: {
