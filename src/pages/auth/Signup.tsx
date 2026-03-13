@@ -12,12 +12,37 @@ const Signup = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [promoCode, setPromoCode] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const validateAndGetPromo = async (code: string) => {
+    if (!code.trim()) return null;
+    const { data, error } = await supabase
+      .from("promo_codes")
+      .select("id, code, discount_percent")
+      .eq("code", code.trim().toUpperCase())
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+
+    // Validate promo code if entered
+    let promoData = null;
+    if (promoCode.trim()) {
+      promoData = await validateAndGetPromo(promoCode);
+      if (!promoData) {
+        toast.error("Invalid or expired promo code.");
+        setLoading(false);
+        return;
+      }
+    }
+
+    const { data: authData, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -28,10 +53,26 @@ const Signup = () => {
     setLoading(false);
     if (error) {
       toast.error(error.message);
-    } else {
-      toast.success("Account created! You have 3 free interviews.");
-      navigate("/dashboard");
+      return;
     }
+
+    // Save promo code to profile and track referral
+    if (promoData && authData.user) {
+      await supabase
+        .from("profiles")
+        .update({ used_promo_code: promoData.code } as any)
+        .eq("id", authData.user.id);
+
+      await supabase
+        .from("referral_signups")
+        .insert({ promo_code_id: promoData.id, user_id: authData.user.id } as any);
+    }
+
+    const discountMsg = promoData
+      ? ` You get ${promoData.discount_percent}% discount!`
+      : "";
+    toast.success(`Account created! You have 1 free interview.${discountMsg}`);
+    navigate("/dashboard");
   };
 
   const handleGoogleSignup = async () => {
@@ -76,6 +117,17 @@ const Signup = () => {
           <div>
             <Label htmlFor="password">Password</Label>
             <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className="mt-1 border-2 border-ink" />
+          </div>
+          <div>
+            <Label htmlFor="promo">Promo Code <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input
+              id="promo"
+              type="text"
+              placeholder="e.g. TESTPROMO"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              className="mt-1 border-2 border-ink uppercase tracking-wider"
+            />
           </div>
           <button type="submit" disabled={loading} className="neo-btn w-full bg-primary text-primary-foreground disabled:opacity-50">
             {loading ? "Creating account..." : "Create Account"}
