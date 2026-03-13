@@ -4,6 +4,7 @@ import Logo from "@/components/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CreditCard, CheckCircle, Trophy, Mic, ArrowRight, Lightbulb } from "lucide-react";
+import DownloadShareCard from "@/components/dashboard/DownloadShareCard";
 import { toast } from "sonner";
 
 interface Interview {
