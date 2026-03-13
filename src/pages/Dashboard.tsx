@@ -163,12 +163,22 @@ const Dashboard = () => {
                           <span>{new Date(interview.created_at).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3">
                         <span className="neo-badge bg-success/20 text-success">Done</span>
                         {reports[interview.id] !== undefined && (
-                          <span className={`font-heading text-lg font-bold ${getScoreColor(reports[interview.id])}`}>
-                            {reports[interview.id]}%
-                          </span>
+                          <>
+                            <span className={`font-heading text-lg font-bold ${getScoreColor(reports[interview.id].overall_score)}`}>
+                              {reports[interview.id].overall_score}%
+                            </span>
+                            <DownloadShareCard
+                              overallScore={reports[interview.id].overall_score}
+                              confScore={reports[interview.id].conf_score}
+                              clarityScore={reports[interview.id].clarity_score}
+                              structScore={reports[interview.id].struct_score}
+                              commScore={reports[interview.id].comm_score}
+                              role={interview.role}
+                            />
+                          </>
                         )}
                         <Link to={`/report/${interview.id}`} className="flex items-center gap-1 font-semibold text-primary hover:underline">
                           View <ArrowRight className="h-4 w-4" />
