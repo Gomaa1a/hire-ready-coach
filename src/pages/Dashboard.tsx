@@ -73,7 +73,7 @@ const Dashboard = () => {
   };
 
   const completedInterviews = interviews.filter((i) => i.status === "completed");
-  const bestScore = Object.values(reports).length > 0 ? Math.max(...Object.values(reports)) : 0;
+  const bestScore = Object.values(reports).length > 0 ? Math.max(...Object.values(reports).map(r => r.overall_score)) : 0;
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "text-success";
