@@ -20,7 +20,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [credits, setCredits] = useState<number>(0);
   const [interviews, setInterviews] = useState<Interview[]>([]);
-  const [reports, setReports] = useState<Record<string, number>>({});
+  const [reports, setReports] = useState<Record<string, { overall_score: number; conf_score: number; clarity_score: number; struct_score: number; comm_score: number }>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
