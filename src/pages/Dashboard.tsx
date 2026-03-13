@@ -4,6 +4,7 @@ import Logo from "@/components/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CreditCard, CheckCircle, Trophy, Mic, ArrowRight, Lightbulb } from "lucide-react";
+import DownloadShareCard from "@/components/dashboard/DownloadShareCard";
 import { toast } from "sonner";
 
 interface Interview {
@@ -19,7 +20,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [credits, setCredits] = useState<number>(0);
   const [interviews, setInterviews] = useState<Interview[]>([]);
-  const [reports, setReports] = useState<Record<string, number>>({});
+  const [reports, setReports] = useState<Record<string, { overall_score: number; conf_score: number; clarity_score: number; struct_score: number; comm_score: number }>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,12 +45,18 @@ const Dashboard = () => {
       // Fetch reports for scores
       const { data: reportData } = await supabase
         .from("reports")
-        .select("interview_id, overall_score")
+        .select("interview_id, overall_score, conf_score, clarity_score, struct_score, comm_score")
         .eq("user_id", user.id);
       if (reportData) {
-        const map: Record<string, number> = {};
+        const map: Record<string, { overall_score: number; conf_score: number; clarity_score: number; struct_score: number; comm_score: number }> = {};
         reportData.forEach((r) => {
-          if (r.overall_score !== null) map[r.interview_id] = r.overall_score;
+          if (r.overall_score !== null) map[r.interview_id] = {
+            overall_score: r.overall_score ?? 0,
+            conf_score: r.conf_score ?? 0,
+            clarity_score: r.clarity_score ?? 0,
+            struct_score: r.struct_score ?? 0,
+            comm_score: r.comm_score ?? 0,
+          };
         });
         setReports(map);
       }
@@ -66,7 +73,7 @@ const Dashboard = () => {
   };
 
   const completedInterviews = interviews.filter((i) => i.status === "completed");
-  const bestScore = Object.values(reports).length > 0 ? Math.max(...Object.values(reports)) : 0;
+  const bestScore = Object.values(reports).length > 0 ? Math.max(...Object.values(reports).map(r => r.overall_score)) : 0;
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "text-success";
@@ -156,12 +163,22 @@ const Dashboard = () => {
                           <span>{new Date(interview.created_at).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3">
                         <span className="neo-badge bg-success/20 text-success">Done</span>
                         {reports[interview.id] !== undefined && (
-                          <span className={`font-heading text-lg font-bold ${getScoreColor(reports[interview.id])}`}>
-                            {reports[interview.id]}%
-                          </span>
+                          <>
+                            <span className={`font-heading text-lg font-bold ${getScoreColor(reports[interview.id].overall_score)}`}>
+                              {reports[interview.id].overall_score}%
+                            </span>
+                            <DownloadShareCard
+                              overallScore={reports[interview.id].overall_score}
+                              confScore={reports[interview.id].conf_score}
+                              clarityScore={reports[interview.id].clarity_score}
+                              structScore={reports[interview.id].struct_score}
+                              commScore={reports[interview.id].comm_score}
+                              role={interview.role}
+                            />
+                          </>
                         )}
                         <Link to={`/report/${interview.id}`} className="flex items-center gap-1 font-semibold text-primary hover:underline">
                           View <ArrowRight className="h-4 w-4" />
