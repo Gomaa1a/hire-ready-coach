@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Mic, MicOff, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
-import { useScribe } from "@elevenlabs/react";
+import { useScribe, CommitStrategy } from "@elevenlabs/react";
 import { supabase } from "@/integrations/supabase/client";
 import VoiceVisualizer from "@/components/interview/VoiceVisualizer";
 import InterviewTopBar from "@/components/interview/InterviewTopBar";
