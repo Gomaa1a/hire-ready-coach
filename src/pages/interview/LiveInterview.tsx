@@ -2,39 +2,19 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Mic, MicOff, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
-import { useConversation } from "@elevenlabs/react";
+import { useScribe } from "@elevenlabs/react";
 import { supabase } from "@/integrations/supabase/client";
 import VoiceVisualizer from "@/components/interview/VoiceVisualizer";
 import InterviewTopBar from "@/components/interview/InterviewTopBar";
 
 type TranscriptEntry = { role: "ai" | "user"; text: string };
 
-const parseTranscriptMessage = (payload: unknown): TranscriptEntry | null => {
-  if (!payload) return null;
-
-  if (typeof payload === "string") {
-    const text = payload.trim();
-    return text ? { role: "ai", text } : null;
-  }
-
-  if (typeof payload !== "object") return null;
-
-  const data = payload as Record<string, unknown>;
-  const nested =
-    data.message && typeof data.message === "object"
-      ? (data.message as Record<string, unknown>)
-      : null;
-
-  const textCandidate =
-    data.message ?? data.text ?? data.content ?? nested?.message ?? nested?.text ?? nested?.content;
-
-  if (typeof textCandidate !== "string" || !textCandidate.trim()) return null;
-
-  const roleCandidate = data.role ?? data.source ?? nested?.role ?? nested?.source;
-  const role =
-    roleCandidate === "agent" || roleCandidate === "ai" ? "ai" : "user";
-
-  return { role, text: textCandidate.trim() };
+const PHASE_LABELS: Record<string, string> = {
+  opening: "Opening",
+  technical: "Technical Deep-dive",
+  behavioral: "Behavioral",
+  situational: "Situational",
+  closing: "Closing",
 };
 
 const LiveInterview = () => {
@@ -45,52 +25,59 @@ const LiveInterview = () => {
   const [timeLeft, setTimeLeft] = useState(900);
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
-  const transcriptRef = useRef<TranscriptEntry[]>([]);
   const [interviewData, setInterviewData] = useState<{ role: string; level: string } | null>(null);
+  const [currentPhase, setCurrentPhase] = useState("opening");
+  const [questionCount, setQuestionCount] = useState(0);
+  const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [processing, setProcessing] = useState(false);
+
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const userSpeechBuffer = useRef("");
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch interview details on mount
   useEffect(() => {
     if (!id) return;
-    const fetchInterview = async () => {
-      const { data } = await supabase
-        .from("interviews")
-        .select("role, level")
-        .eq("id", id)
-        .single();
-      if (data) setInterviewData(data);
-    };
-    fetchInterview();
+    supabase
+      .from("interviews")
+      .select("role, level")
+      .eq("id", id)
+      .single()
+      .then(({ data }) => {
+        if (data) setInterviewData(data);
+      });
   }, [id]);
 
-  const conversation = useConversation({
-    onConnect: () => {
-      console.log("Connected to AI interviewer");
-      setInterviewStarted(true);
-      toast.success("Connected! The interviewer will begin shortly.");
+  // Setup ElevenLabs Scribe for real-time STT
+  const scribe = useScribe({
+    modelId: "scribe_v2_realtime",
+    commitStrategy: "vad",
+    onPartialTranscript: (data) => {
+      // Update live partial text display
+      userSpeechBuffer.current = data.text;
     },
-    onDisconnect: () => {
-      console.log("Disconnected from AI interviewer");
-      if (interviewStarted) {
-        handleEndInterview();
-      }
-    },
-    onMessage: (payload) => {
-      const entry = parseTranscriptMessage(payload);
-      if (!entry) return;
+    onCommittedTranscript: (data) => {
+      if (!data.text.trim() || aiSpeaking || processing) return;
+      const text = data.text.trim();
+      userSpeechBuffer.current = "";
 
-      setTranscript((prev) => {
-        const next = [...prev, entry];
-        transcriptRef.current = next;
-        return next;
-      });
-    },
-    onError: (error) => {
-      console.error("Conversation error:", error);
-      toast.error("Connection error. Please try again.");
+      // Add to transcript display
+      setTranscript((prev) => [...prev, { role: "user", text }]);
+
+      // Debounce: wait for silence before sending to orchestrator
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = setTimeout(() => {
+        handleUserTurn(text);
+      }, 1200);
     },
   });
+
+  // Auto-scroll transcript
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript]);
 
   // Timer
   useEffect(() => {
@@ -99,7 +86,7 @@ const LiveInterview = () => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          conversation.endSession();
+          handleEndInterview();
           return 0;
         }
         return prev - 1;
@@ -108,94 +95,149 @@ const LiveInterview = () => {
     return () => clearInterval(timer);
   }, [interviewStarted]);
 
-  // Auto-scroll transcript
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcript]);
+  const playTTS = useCallback(async (text: string): Promise<void> => {
+    setAiSpeaking(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts-stream`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ text }),
+        }
+      );
+
+      if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      await new Promise<void>((resolve, reject) => {
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          resolve();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(audioUrl);
+          reject(new Error("Audio playback failed"));
+        };
+        audio.play().catch(reject);
+      });
+    } catch (e) {
+      console.error("TTS playback error:", e);
+    } finally {
+      setAiSpeaking(false);
+      audioRef.current = null;
+    }
+  }, []);
+
+  const callOrchestrator = useCallback(async (userMessage?: string) => {
+    setProcessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("interview-orchestrator", {
+        body: { interviewId: id, userMessage: userMessage || "" },
+      });
+
+      if (error) throw error;
+      if (!data?.next_question) throw new Error("No question returned");
+
+      setCurrentPhase(data.phase || "opening");
+      setQuestionCount(data.question_count || 0);
+
+      // Add AI response to transcript
+      setTranscript((prev) => [...prev, { role: "ai", text: data.next_question }]);
+
+      // Play TTS
+      await playTTS(data.next_question);
+    } catch (e) {
+      console.error("Orchestrator error:", e);
+      toast.error("Failed to get next question. Please try again.");
+    } finally {
+      setProcessing(false);
+    }
+  }, [id, playTTS]);
+
+  const handleUserTurn = useCallback(async (text: string) => {
+    await callOrchestrator(text);
+  }, [callOrchestrator]);
 
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const { data, error } = await supabase.functions.invoke("elevenlabs-token", {
-        body: { interviewId: id },
+      // Get scribe token
+      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
+      if (error || !data?.token) throw new Error("No scribe token received");
+
+      // Connect STT
+      await scribe.connect({
+        token: data.token,
+        microphone: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
       });
 
-      if (error || !data?.token) {
-        throw new Error(error?.message || "No token received");
-      }
+      setInterviewStarted(true);
+      toast.success("Connected! Starting interview...");
 
-      // Use WebRTC with conversation token (recommended for best audio quality)
-      await conversation.startSession({
-        conversationToken: data.token,
-        connectionType: "webrtc",
-      });
-
-      // Send CV context as a contextual update (doesn't replace agent prompt)
-      if (data.cvContext) {
-        conversation.sendContextualUpdate(data.cvContext);
-      }
+      // Trigger first question from orchestrator
+      await callOrchestrator();
     } catch (error) {
       console.error("Failed to start conversation:", error);
       toast.error("Failed to connect. Please check microphone permissions.");
     } finally {
       setIsConnecting(false);
     }
-  }, [conversation]);
+  }, [scribe, callOrchestrator]);
 
   const handleEndInterview = useCallback(async () => {
     if (endingRef.current) return;
     endingRef.current = true;
-    conversation.endSession();
-    toast.success("Great work! Saving transcript...");
 
-    const currentTranscript = transcriptRef.current;
-
-    // Save transcript to messages table
-    if (id && currentTranscript.length > 0) {
-      try {
-        const msgs = currentTranscript.map((t) => ({
-          interview_id: id,
-          role: t.role === "ai" ? "assistant" : "user",
-          content: t.text,
-        }));
-        const { error } = await supabase.from("messages").insert(msgs);
-        if (error) console.error("Failed to save transcript:", error);
-      } catch (err) {
-        console.error("Error saving transcript:", err);
-      }
+    // Stop audio and STT
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
     }
+    scribe.disconnect();
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
-    // Update interview status to completed
+    toast.success("Great work! Processing results...");
+
+    // Update interview status
     if (id) {
       await supabase
         .from("interviews")
         .update({ status: "completed", ended_at: new Date().toISOString() })
         .eq("id", id);
 
-      // Generate AI report only if we have transcript
-      if (currentTranscript.length > 0) {
-        toast.info("Generating your AI report...");
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { error: reportErr } = await supabase.functions.invoke("generate-report", {
-            body: { interviewId: id, userId: user.id },
-          });
-          if (reportErr) {
-            console.error("Report generation failed:", reportErr);
-            toast.error("Report generation failed. You can retry from the dashboard.");
-          }
+      // Generate AI report
+      toast.info("Generating your AI report...");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { error: reportErr } = await supabase.functions.invoke("generate-report", {
+          body: { interviewId: id, userId: user.id },
+        });
+        if (reportErr) {
+          console.error("Report generation failed:", reportErr);
+          toast.error("Report generation failed. You can retry from the dashboard.");
         }
       }
     }
 
     navigate(`/report/${id || "demo"}`);
-  }, [conversation, navigate, id]);
+  }, [scribe, navigate, id]);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => !prev);
-    // Note: ElevenLabs SDK handles muting internally
     toast.info(isMuted ? "Microphone unmuted" : "Microphone muted");
   }, [isMuted]);
 
@@ -207,7 +249,6 @@ const LiveInterview = () => {
 
   return (
     <div className="flex h-screen flex-col bg-ink text-foreground">
-      {/* Top bar */}
       <InterviewTopBar
         timeLeft={timeLeft}
         formatTime={formatTime}
@@ -215,10 +256,8 @@ const LiveInterview = () => {
         onEnd={handleEndInterview}
       />
 
-      {/* Main content */}
       <div className="flex flex-1 flex-col items-center justify-center gap-8 overflow-hidden px-4">
         {!interviewStarted ? (
-          /* Pre-call screen */
           <div className="flex flex-col items-center gap-6 text-center">
             <div className="flex h-32 w-32 items-center justify-center rounded-full bg-primary/20">
               <Mic className="h-16 w-16 text-primary" />
@@ -232,8 +271,8 @@ const LiveInterview = () => {
               </p>
             )}
             <p className="max-w-md text-sm text-primary-foreground/60">
-              This is a voice-only interview. The AI interviewer will ask questions
-              and listen to your answers, just like a real Google Meet interview.
+              This is a voice-only interview powered by advanced AI. The interviewer will adapt
+              questions based on your answers, just like a real interview.
               {interviewData && " Your CV has been shared with the interviewer."}
             </p>
             <button
@@ -245,30 +284,39 @@ const LiveInterview = () => {
             </button>
           </div>
         ) : (
-          /* Active call screen */
           <div className="flex w-full max-w-4xl flex-1 flex-col items-center gap-6">
+            {/* Phase indicator */}
+            <div className="flex items-center gap-3">
+              <span className="rounded-md border border-foreground/20 bg-foreground/10 px-3 py-1 text-xs font-semibold text-primary-foreground/70">
+                {PHASE_LABELS[currentPhase] || currentPhase} · Q{questionCount}
+              </span>
+              {processing && (
+                <span className="text-xs text-primary-foreground/50 animate-pulse">
+                  Thinking...
+                </span>
+              )}
+            </div>
+
             {/* Participant cards */}
             <div className="flex flex-1 items-center justify-center gap-8">
               {/* AI interviewer card */}
               <div className="flex flex-col items-center gap-4">
                 <div
                   className={`relative flex h-40 w-40 items-center justify-center rounded-full transition-all duration-300 ${
-                    conversation.isSpeaking
+                    aiSpeaking
                       ? "bg-primary/30 ring-4 ring-primary ring-offset-4 ring-offset-ink"
                       : "bg-foreground/10"
                   }`}
                 >
                   <span className="text-5xl">🤖</span>
-                  {conversation.isSpeaking && (
-                    <VoiceVisualizer isActive={true} color="primary" />
-                  )}
+                  {aiSpeaking && <VoiceVisualizer isActive={true} color="primary" />}
                 </div>
                 <div className="text-center">
                   <p className="font-heading text-sm font-bold text-primary-foreground">
                     AI Interviewer
                   </p>
                   <p className="text-xs text-primary-foreground/50">
-                    {conversation.isSpeaking ? "Speaking..." : "Listening"}
+                    {aiSpeaking ? "Speaking..." : processing ? "Thinking..." : "Listening"}
                   </p>
                 </div>
               </div>
@@ -277,28 +325,26 @@ const LiveInterview = () => {
               <div className="flex flex-col items-center gap-4">
                 <div
                   className={`relative flex h-40 w-40 items-center justify-center rounded-full transition-all duration-300 ${
-                    !conversation.isSpeaking && !isMuted
+                    !aiSpeaking && !isMuted && !processing
                       ? "bg-accent/30 ring-4 ring-accent ring-offset-4 ring-offset-ink"
                       : "bg-foreground/10"
                   }`}
                 >
                   <span className="text-5xl">👤</span>
-                  {!conversation.isSpeaking && !isMuted && (
+                  {!aiSpeaking && !isMuted && !processing && (
                     <VoiceVisualizer isActive={true} color="accent" />
                   )}
                 </div>
                 <div className="text-center">
-                  <p className="font-heading text-sm font-bold text-primary-foreground">
-                    You
-                  </p>
+                  <p className="font-heading text-sm font-bold text-primary-foreground">You</p>
                   <p className="text-xs text-primary-foreground/50">
-                    {isMuted ? "Muted" : conversation.isSpeaking ? "Waiting..." : "Your turn"}
+                    {isMuted ? "Muted" : aiSpeaking ? "Waiting..." : processing ? "Waiting..." : "Your turn"}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Live transcript (subtle, bottom area) */}
+            {/* Live transcript */}
             <div className="w-full max-w-2xl rounded-xl bg-foreground/5 p-4">
               <div className="max-h-32 overflow-y-auto">
                 {transcript.length === 0 ? (
@@ -315,6 +361,11 @@ const LiveInterview = () => {
                     </p>
                   ))
                 )}
+                {userSpeechBuffer.current && (
+                  <p className="mb-1 text-xs text-primary-foreground/40 italic">
+                    You: {userSpeechBuffer.current}...
+                  </p>
+                )}
                 <div ref={transcriptEndRef} />
               </div>
             </div>
@@ -322,7 +373,7 @@ const LiveInterview = () => {
         )}
       </div>
 
-      {/* Bottom controls bar (Google Meet style) */}
+      {/* Bottom controls */}
       {interviewStarted && (
         <div className="flex items-center justify-center gap-4 border-t border-foreground/10 py-5">
           <button
