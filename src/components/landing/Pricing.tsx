@@ -3,9 +3,9 @@ import { Check } from "lucide-react";
 
 const plans = [
   {
-    name: "Free",
-    price: "$0",
-    period: "",
+    name: "Trial",
+    price: "$3",
+    period: "one-time",
     credits: "1 interview",
     features: ["AI interviewer", "Voice input", "Basic report", "1 role"],
     cta: "Get Started",
@@ -17,7 +17,7 @@ const plans = [
     price: "$9",
     period: "one-time",
     credits: "+5 interviews",
-    features: ["Everything in Free", "All roles", "Full 6D report", "CV upload"],
+    features: ["Everything in Trial", "All roles", "Full 6D report", "CV upload"],
     cta: "Buy Starter",
     highlight: false,
     bg: "bg-card",
