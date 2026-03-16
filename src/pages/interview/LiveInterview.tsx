@@ -53,7 +53,7 @@ const LiveInterview = () => {
   // Setup ElevenLabs Scribe for real-time STT
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
-    commitStrategy: "vad",
+    commitStrategy: CommitStrategy.VAD,
     onPartialTranscript: (data) => {
       // Update live partial text display
       userSpeechBuffer.current = data.text;
