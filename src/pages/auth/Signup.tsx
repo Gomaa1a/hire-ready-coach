@@ -71,7 +71,7 @@ const Signup = () => {
     const discountMsg = promoData
       ? ` You get ${promoData.discount_percent}% discount!`
       : "";
-    toast.success(`Account created! You have 1 free interview.${discountMsg}`);
+    toast.success(`Account created!${discountMsg} Purchase credits to start practicing.`);
     navigate("/dashboard");
   };
 

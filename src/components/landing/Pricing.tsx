@@ -52,7 +52,7 @@ const Pricing = () => {
           Simple pricing
         </h2>
         <p className="mx-auto mb-12 max-w-lg text-center text-muted-foreground">
-          Start free. Pay only when you need more practice.
+          Start with a single interview for just $3. Scale as you grow.
         </p>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((p) => (
