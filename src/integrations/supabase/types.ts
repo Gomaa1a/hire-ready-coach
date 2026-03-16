@@ -35,6 +35,47 @@ export type Database = {
         }
         Relationships: []
       }
+      interview_state: {
+        Row: {
+          current_phase: string
+          cv_summary: string | null
+          id: string
+          interview_id: string
+          question_count: number
+          running_scores: Json
+          topics_covered: Json
+          updated_at: string
+        }
+        Insert: {
+          current_phase?: string
+          cv_summary?: string | null
+          id?: string
+          interview_id: string
+          question_count?: number
+          running_scores?: Json
+          topics_covered?: Json
+          updated_at?: string
+        }
+        Update: {
+          current_phase?: string
+          cv_summary?: string | null
+          id?: string
+          interview_id?: string
+          question_count?: number
+          running_scores?: Json
+          topics_covered?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_state_interview_id_fkey"
+            columns: ["interview_id"]
+            isOneToOne: true
+            referencedRelation: "interviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       interviews: {
         Row: {
           created_at: string
