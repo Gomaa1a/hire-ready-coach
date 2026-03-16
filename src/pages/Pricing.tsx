@@ -4,6 +4,14 @@ import { Check, Lock } from "lucide-react";
 
 const plans = [
   {
+    name: "Trial",
+    price: "$3",
+    period: "one-time",
+    credits: "1 interview",
+    features: ["AI interviewer", "Voice input", "Basic report", "1 role"],
+    highlight: false,
+  },
+  {
     name: "Starter",
     price: "$9",
     period: "one-time",
