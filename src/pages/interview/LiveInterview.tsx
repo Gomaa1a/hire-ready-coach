@@ -34,6 +34,7 @@ const LiveInterview = () => {
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const userSpeechBuffer = useRef("");
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -95,9 +96,24 @@ const LiveInterview = () => {
     return () => clearInterval(timer);
   }, [interviewStarted]);
 
+  // Unlock audio context on user interaction (needed for autoplay policy)
+  const unlockAudio = useCallback(() => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+    if (audioContextRef.current.state === "suspended") {
+      audioContextRef.current.resume();
+    }
+  }, []);
+
   const playTTS = useCallback(async (text: string): Promise<void> => {
     setAiSpeaking(true);
     try {
+      // Ensure audio context is active
+      if (audioContextRef.current?.state === "suspended") {
+        await audioContextRef.current.resume();
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts-stream`,
         {
@@ -111,11 +127,21 @@ const LiveInterview = () => {
         }
       );
 
-      if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("TTS response error:", response.status, errText);
+        throw new Error(`TTS failed: ${response.status}`);
+      }
 
       const audioBlob = await response.blob();
+      if (audioBlob.size === 0) {
+        console.error("TTS returned empty audio blob");
+        throw new Error("Empty audio response");
+      }
+
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
+      audio.volume = 1.0;
       audioRef.current = audio;
 
       await new Promise<void>((resolve, reject) => {
@@ -123,14 +149,20 @@ const LiveInterview = () => {
           URL.revokeObjectURL(audioUrl);
           resolve();
         };
-        audio.onerror = () => {
+        audio.onerror = (e) => {
+          console.error("Audio element error:", e);
           URL.revokeObjectURL(audioUrl);
           reject(new Error("Audio playback failed"));
         };
-        audio.play().catch(reject);
+        audio.play().catch((playErr) => {
+          console.error("audio.play() rejected:", playErr);
+          URL.revokeObjectURL(audioUrl);
+          reject(playErr);
+        });
       });
     } catch (e) {
       console.error("TTS playback error:", e);
+      toast.error("Could not play audio. Please check your volume.");
     } finally {
       setAiSpeaking(false);
       audioRef.current = null;
@@ -170,6 +202,9 @@ const LiveInterview = () => {
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
     try {
+      // Unlock audio on user gesture (critical for autoplay policy)
+      unlockAudio();
+
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
       // Get scribe token
@@ -196,7 +231,7 @@ const LiveInterview = () => {
     } finally {
       setIsConnecting(false);
     }
-  }, [scribe, callOrchestrator]);
+  }, [scribe, callOrchestrator, unlockAudio]);
 
   const handleEndInterview = useCallback(async () => {
     if (endingRef.current) return;
@@ -212,27 +247,32 @@ const LiveInterview = () => {
 
     toast.success("Great work! Processing results...");
 
-    // Update interview status
+    // Update interview status and trigger report generation
     if (id) {
-      await supabase
-        .from("interviews")
-        .update({ status: "completed", ended_at: new Date().toISOString() })
-        .eq("id", id);
+      try {
+        await supabase
+          .from("interviews")
+          .update({ status: "completed", ended_at: new Date().toISOString() })
+          .eq("id", id);
 
-      // Generate AI report
-      toast.info("Generating your AI report...");
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { error: reportErr } = await supabase.functions.invoke("generate-report", {
-          body: { interviewId: id, userId: user.id },
-        });
-        if (reportErr) {
-          console.error("Report generation failed:", reportErr);
-          toast.error("Report generation failed. You can retry from the dashboard.");
+        // Generate AI report (fire and don't block navigation)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // Don't await - let report generate while user navigates to report page (it polls)
+          supabase.functions.invoke("generate-report", {
+            body: { interviewId: id, userId: user.id },
+          }).then(({ error: reportErr }) => {
+            if (reportErr) {
+              console.error("Report generation failed:", reportErr);
+            }
+          });
         }
+      } catch (e) {
+        console.error("End interview error:", e);
       }
     }
 
+    // Navigate immediately - Report page will poll for the report
     navigate(`/report/${id || "demo"}`);
   }, [scribe, navigate, id]);
 

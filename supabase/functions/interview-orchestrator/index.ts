@@ -38,6 +38,24 @@ function buildSystemPrompt(
     ? `\n\nCANDIDATE CV SUMMARY:\n${cvSummary}\n\nUse this CV to ask personalized questions about their specific experience, projects, and skills mentioned. Reference specific items from their CV.`
     : "\nNo CV provided. Ask general questions appropriate for the role and level.";
 
+  // Determine if this role might involve Arabic language skills
+  const arabicKeywords = [
+    "arabic", "عربي", "middle east", "mena", "gcc", "saudi", "uae", "dubai", "qatar", "kuwait", "bahrain", "oman",
+    "jordan", "egypt", "lebanon", "morocco", "customer service", "support", "sales", "marketing", "content",
+    "copywriter", "translator", "teacher", "recruiter", "hr", "public relations", "communications",
+  ];
+  const roleLower = role.toLowerCase();
+  const cvLower = (cvSummary || "").toLowerCase();
+  const mightInvolveArabic = arabicKeywords.some(kw => roleLower.includes(kw) || cvLower.includes(kw));
+
+  const arabicSection = mightInvolveArabic
+    ? `\n\nARABIC LANGUAGE TESTING:
+This role may involve Arabic language skills. During the interview (especially in Technical or Behavioral phases), occasionally ask 1-2 questions where you request the candidate to answer in Arabic. Frame it naturally, e.g.:
+- "For this next question, I'd like you to answer in Arabic so I can assess your fluency. [Ask the question in English]"
+- "Since this role involves Arabic communication, could you describe [topic] in Arabic?"
+YOU (the interviewer) should always speak/ask in English, but request the candidate to respond in Arabic for those specific questions. Do this 1-2 times during the interview, not every question.`
+    : "";
+
   return `You are a professional, experienced interviewer conducting a mock interview for a ${level} ${role} position.
 
 CURRENT STATE:
@@ -46,6 +64,7 @@ CURRENT STATE:
 - ${scoresStr}
 - ${topicsStr}
 ${cvSection}
+${arabicSection}
 
 INTERVIEW METHODOLOGY:
 
