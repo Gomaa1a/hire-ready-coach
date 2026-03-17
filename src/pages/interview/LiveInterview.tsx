@@ -202,6 +202,9 @@ const LiveInterview = () => {
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
     try {
+      // Unlock audio on user gesture (critical for autoplay policy)
+      unlockAudio();
+
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
       // Get scribe token
@@ -228,7 +231,7 @@ const LiveInterview = () => {
     } finally {
       setIsConnecting(false);
     }
-  }, [scribe, callOrchestrator]);
+  }, [scribe, callOrchestrator, unlockAudio]);
 
   const handleEndInterview = useCallback(async () => {
     if (endingRef.current) return;
