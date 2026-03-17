@@ -35,6 +35,7 @@ const LiveInterview = () => {
   const endingRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const userSpeechBuffer = useRef("");
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -96,23 +97,29 @@ const LiveInterview = () => {
     return () => clearInterval(timer);
   }, [interviewStarted]);
 
-  // Unlock audio context on user interaction (needed for autoplay policy)
-  const unlockAudio = useCallback(() => {
+  const ensureAudioContext = useCallback(async () => {
     if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
+      audioContextRef.current = new AudioContext({ latencyHint: "interactive" });
     }
     if (audioContextRef.current.state === "suspended") {
-      audioContextRef.current.resume();
+      await audioContextRef.current.resume();
     }
+    return audioContextRef.current;
   }, []);
+
+  // Unlock audio context on user interaction (needed for autoplay policy)
+  const unlockAudio = useCallback(async () => {
+    await ensureAudioContext();
+  }, [ensureAudioContext]);
 
   const playTTS = useCallback(async (text: string): Promise<void> => {
     setAiSpeaking(true);
     try {
-      // Ensure audio context is active
-      if (audioContextRef.current?.state === "suspended") {
-        await audioContextRef.current.resume();
-      }
+      const audioContext = await ensureAudioContext();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts-stream`,
@@ -121,7 +128,7 @@ const LiveInterview = () => {
           headers: {
             "Content-Type": "application/json",
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify({ text }),
         }
@@ -133,41 +140,58 @@ const LiveInterview = () => {
         throw new Error(`TTS failed: ${response.status}`);
       }
 
-      const audioBlob = await response.blob();
-      if (audioBlob.size === 0) {
-        console.error("TTS returned empty audio blob");
+      const audioBuffer = await response.arrayBuffer();
+      if (audioBuffer.byteLength === 0) {
+        console.error("TTS returned empty audio buffer");
         throw new Error("Empty audio response");
       }
 
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      audio.volume = 1.0;
-      audioRef.current = audio;
-
-      await new Promise<void>((resolve, reject) => {
-        audio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
-          resolve();
-        };
-        audio.onerror = (e) => {
-          console.error("Audio element error:", e);
-          URL.revokeObjectURL(audioUrl);
-          reject(new Error("Audio playback failed"));
-        };
-        audio.play().catch((playErr) => {
-          console.error("audio.play() rejected:", playErr);
-          URL.revokeObjectURL(audioUrl);
-          reject(playErr);
+      try {
+        const decoded = await audioContext.decodeAudioData(audioBuffer.slice(0));
+        await new Promise<void>((resolve) => {
+          const source = audioContext.createBufferSource();
+          source.buffer = decoded;
+          source.connect(audioContext.destination);
+          audioSourceRef.current = source;
+          source.onended = () => {
+            if (audioSourceRef.current === source) {
+              audioSourceRef.current = null;
+            }
+            resolve();
+          };
+          source.start(0);
         });
-      });
+      } catch (decodeError) {
+        console.warn("AudioContext decode failed, using HTML audio fallback", decodeError);
+        const audioBlob = new Blob([audioBuffer], { type: "audio/mpeg" });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.volume = 1.0;
+        audioRef.current = audio;
+
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(audioUrl);
+            reject(new Error("Audio playback failed"));
+          };
+          audio.play().catch((playErr) => {
+            URL.revokeObjectURL(audioUrl);
+            reject(playErr);
+          });
+        });
+      }
     } catch (e) {
       console.error("TTS playback error:", e);
-      toast.error("Could not play audio. Please check your volume.");
+      toast.error("Could not play interviewer audio. Please check your device output.");
     } finally {
       setAiSpeaking(false);
       audioRef.current = null;
     }
-  }, []);
+  }, [ensureAudioContext]);
 
   const callOrchestrator = useCallback(async (userMessage?: string) => {
     setProcessing(true);
@@ -203,7 +227,7 @@ const LiveInterview = () => {
     setIsConnecting(true);
     try {
       // Unlock audio on user gesture (critical for autoplay policy)
-      unlockAudio();
+      await unlockAudio();
 
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -238,10 +262,21 @@ const LiveInterview = () => {
     endingRef.current = true;
 
     // Stop audio and STT
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.stop();
+      } catch {
+        // no-op if source already ended
+      }
+      audioSourceRef.current.disconnect();
+      audioSourceRef.current = null;
+    }
+
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
+
     scribe.disconnect();
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
@@ -256,16 +291,20 @@ const LiveInterview = () => {
           .eq("id", id);
 
         // Generate AI report (fire and don't block navigation)
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (user) {
           // Don't await - let report generate while user navigates to report page (it polls)
-          supabase.functions.invoke("generate-report", {
-            body: { interviewId: id, userId: user.id },
-          }).then(({ error: reportErr }) => {
-            if (reportErr) {
-              console.error("Report generation failed:", reportErr);
-            }
-          });
+          supabase.functions
+            .invoke("generate-report", {
+              body: { interviewId: id, userId: user.id },
+            })
+            .then(({ error: reportErr }) => {
+              if (reportErr) {
+                console.error("Report generation failed:", reportErr);
+              }
+            });
         }
       } catch (e) {
         console.error("End interview error:", e);
