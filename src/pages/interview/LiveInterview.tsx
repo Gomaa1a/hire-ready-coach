@@ -247,27 +247,32 @@ const LiveInterview = () => {
 
     toast.success("Great work! Processing results...");
 
-    // Update interview status
+    // Update interview status and trigger report generation
     if (id) {
-      await supabase
-        .from("interviews")
-        .update({ status: "completed", ended_at: new Date().toISOString() })
-        .eq("id", id);
+      try {
+        await supabase
+          .from("interviews")
+          .update({ status: "completed", ended_at: new Date().toISOString() })
+          .eq("id", id);
 
-      // Generate AI report
-      toast.info("Generating your AI report...");
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { error: reportErr } = await supabase.functions.invoke("generate-report", {
-          body: { interviewId: id, userId: user.id },
-        });
-        if (reportErr) {
-          console.error("Report generation failed:", reportErr);
-          toast.error("Report generation failed. You can retry from the dashboard.");
+        // Generate AI report (fire and don't block navigation)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // Don't await - let report generate while user navigates to report page (it polls)
+          supabase.functions.invoke("generate-report", {
+            body: { interviewId: id, userId: user.id },
+          }).then(({ error: reportErr }) => {
+            if (reportErr) {
+              console.error("Report generation failed:", reportErr);
+            }
+          });
         }
+      } catch (e) {
+        console.error("End interview error:", e);
       }
     }
 
+    // Navigate immediately - Report page will poll for the report
     navigate(`/report/${id || "demo"}`);
   }, [scribe, navigate, id]);
 
