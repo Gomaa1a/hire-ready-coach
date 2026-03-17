@@ -96,9 +96,24 @@ const LiveInterview = () => {
     return () => clearInterval(timer);
   }, [interviewStarted]);
 
+  // Unlock audio context on user interaction (needed for autoplay policy)
+  const unlockAudio = useCallback(() => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+    if (audioContextRef.current.state === "suspended") {
+      audioContextRef.current.resume();
+    }
+  }, []);
+
   const playTTS = useCallback(async (text: string): Promise<void> => {
     setAiSpeaking(true);
     try {
+      // Ensure audio context is active
+      if (audioContextRef.current?.state === "suspended") {
+        await audioContextRef.current.resume();
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts-stream`,
         {
@@ -112,11 +127,21 @@ const LiveInterview = () => {
         }
       );
 
-      if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("TTS response error:", response.status, errText);
+        throw new Error(`TTS failed: ${response.status}`);
+      }
 
       const audioBlob = await response.blob();
+      if (audioBlob.size === 0) {
+        console.error("TTS returned empty audio blob");
+        throw new Error("Empty audio response");
+      }
+
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
+      audio.volume = 1.0;
       audioRef.current = audio;
 
       await new Promise<void>((resolve, reject) => {
@@ -124,14 +149,20 @@ const LiveInterview = () => {
           URL.revokeObjectURL(audioUrl);
           resolve();
         };
-        audio.onerror = () => {
+        audio.onerror = (e) => {
+          console.error("Audio element error:", e);
           URL.revokeObjectURL(audioUrl);
           reject(new Error("Audio playback failed"));
         };
-        audio.play().catch(reject);
+        audio.play().catch((playErr) => {
+          console.error("audio.play() rejected:", playErr);
+          URL.revokeObjectURL(audioUrl);
+          reject(playErr);
+        });
       });
     } catch (e) {
       console.error("TTS playback error:", e);
+      toast.error("Could not play audio. Please check your volume.");
     } finally {
       setAiSpeaking(false);
       audioRef.current = null;
