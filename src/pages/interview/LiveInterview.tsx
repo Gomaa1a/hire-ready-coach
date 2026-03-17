@@ -34,6 +34,7 @@ const LiveInterview = () => {
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const endingRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const userSpeechBuffer = useRef("");
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
