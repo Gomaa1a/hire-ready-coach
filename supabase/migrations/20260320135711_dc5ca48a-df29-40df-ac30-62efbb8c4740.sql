@@ -1,0 +1,1 @@
+ALTER TABLE public.reports ADD COLUMN market_insights jsonb DEFAULT NULL;
