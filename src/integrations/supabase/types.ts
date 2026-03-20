@@ -267,6 +267,7 @@ export type Database = {
           id: string
           impact_score: number | null
           interview_id: string
+          market_insights: Json | null
           overall_score: number | null
           roadmap: Json | null
           strengths: Json | null
@@ -284,6 +285,7 @@ export type Database = {
           id?: string
           impact_score?: number | null
           interview_id: string
+          market_insights?: Json | null
           overall_score?: number | null
           roadmap?: Json | null
           strengths?: Json | null
@@ -301,6 +303,7 @@ export type Database = {
           id?: string
           impact_score?: number | null
           interview_id?: string
+          market_insights?: Json | null
           overall_score?: number | null
           roadmap?: Json | null
           strengths?: Json | null

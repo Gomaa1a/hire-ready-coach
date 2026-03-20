@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2, TrendingUp, DollarSign, Building2, Lightbulb } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ShareResults from "@/components/report/ShareResults";
 
@@ -8,6 +8,14 @@ interface RoadmapItem {
   title: string;
   desc: string;
   resource: string;
+}
+
+interface MarketInsights {
+  top_skills: string[];
+  salary_range: { min: string; max: string; currency: string };
+  hiring_trends: string[];
+  company_tips: string[];
+  top_companies: string[];
 }
 
 interface ReportData {
@@ -22,6 +30,7 @@ interface ReportData {
   weaknesses: string[];
   feedback_text: string;
   roadmap: RoadmapItem[];
+  market_insights: MarketInsights | null;
   created_at: string;
   interview: {
     role: string;
@@ -82,7 +91,6 @@ const Report = () => {
         return;
       }
 
-      // Poll for report (it may still be generating)
       let attempts = 0;
       const maxAttempts = 30;
 
@@ -116,6 +124,7 @@ const Report = () => {
             weaknesses: (data.weaknesses as string[]) ?? [],
             feedback_text: data.feedback_text ?? "",
             roadmap: (data.roadmap as unknown as RoadmapItem[]) ?? [],
+            market_insights: (data.market_insights as unknown as MarketInsights) ?? null,
             created_at: data.created_at,
             interview: interviewData as { role: string; level: string } | null,
           });
@@ -286,6 +295,93 @@ const Report = () => {
           <h3 className="mb-4 font-heading text-lg font-bold">Detailed Feedback</h3>
           <p className="text-muted-foreground leading-relaxed">{report.feedback_text}</p>
         </div>
+
+        {/* Market Insights Section */}
+        {report.market_insights && (
+          <div className="neo-card mb-8 border-2 border-primary/20 bg-primary/5 p-6">
+            <h3 className="mb-6 flex items-center gap-2 font-heading text-lg font-bold">
+              <TrendingUp className="h-5 w-5 text-primary" /> Market Insights for {report.interview?.role || "This Role"}
+            </h3>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Top Skills */}
+              <div>
+                <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground/80">
+                  <Lightbulb className="h-4 w-4 text-primary" /> In-Demand Skills
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {report.market_insights.top_skills?.map((skill, i) => (
+                    <span key={i} className="rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Salary Range */}
+              <div>
+                <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground/80">
+                  <DollarSign className="h-4 w-4 text-success" /> Salary Range
+                </h4>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-heading text-2xl font-bold text-success">
+                    {report.market_insights.salary_range?.min}
+                  </span>
+                  <span className="text-muted-foreground">to</span>
+                  <span className="font-heading text-2xl font-bold text-success">
+                    {report.market_insights.salary_range?.max}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {report.interview?.level} level · {report.market_insights.salary_range?.currency}
+                </p>
+              </div>
+
+              {/* Top Companies Hiring */}
+              <div>
+                <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground/80">
+                  <Building2 className="h-4 w-4 text-primary" /> Companies Hiring
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {report.market_insights.top_companies?.map((company, i) => (
+                    <span key={i} className="rounded-md border border-foreground/15 bg-foreground/5 px-3 py-1 text-xs font-medium">
+                      {company}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Hiring Trends */}
+              <div>
+                <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground/80">
+                  <TrendingUp className="h-4 w-4 text-primary" /> Hiring Trends
+                </h4>
+                <ul className="space-y-2">
+                  {report.market_insights.hiring_trends?.map((trend, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <span className="mt-0.5 text-primary">→</span>
+                      {trend}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* Company Tips */}
+            {report.market_insights.company_tips && report.market_insights.company_tips.length > 0 && (
+              <div className="mt-6 border-t border-primary/10 pt-4">
+                <h4 className="mb-3 text-sm font-bold text-foreground/80">💡 Stand Out Tips</h4>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {report.market_insights.company_tips.map((tip, i) => (
+                    <div key={i} className="rounded-lg bg-background/60 p-3 text-xs text-muted-foreground">
+                      {tip}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Learning roadmap */}
         {report.roadmap.length > 0 && (

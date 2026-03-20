@@ -24,7 +24,8 @@ function buildSystemPrompt(
   questionCount: number,
   runningScores: Record<string, number>,
   topicsCovered: string[],
-  cvSummary: string | null
+  cvSummary: string | null,
+  candidateName: string | null
 ): string {
   const scoresStr = Object.keys(runningScores).length > 0
     ? `Current running scores: ${JSON.stringify(runningScores)}`
@@ -34,8 +35,13 @@ function buildSystemPrompt(
     ? `Topics already covered (do NOT repeat): ${topicsCovered.join(", ")}`
     : "No topics covered yet.";
 
+  const nameRef = candidateName ? candidateName : "the candidate";
+  const greeting = candidateName
+    ? `Address the candidate by their first name "${candidateName.split(" ")[0]}" naturally during the interview.`
+    : "";
+
   const cvSection = cvSummary
-    ? `\n\nCANDIDATE CV SUMMARY:\n${cvSummary}\n\nUse this CV to ask personalized questions about their specific experience, projects, and skills mentioned. Reference specific items from their CV.`
+    ? `\n\nCANDIDATE CV SUMMARY:\n${cvSummary}\n\nUse this CV to ask personalized questions about their specific experience, projects, and skills mentioned. Reference specific items from their CV naturally (e.g., "I see you worked on X at Y company — tell me more about that"). Make transitions personal by connecting their past experience to the next topic.`
     : "\nNo CV provided. Ask general questions appropriate for the role and level.";
 
   // Determine if this role might involve Arabic language skills
@@ -56,7 +62,26 @@ This role may involve Arabic language skills. During the interview (especially i
 YOU (the interviewer) should always speak/ask in English, but request the candidate to respond in Arabic for those specific questions. Do this 1-2 times during the interview, not every question.`
     : "";
 
+  // Determine interview tone based on role context
+  let toneGuidance = "";
+  const roleL = role.toLowerCase();
+  if (roleL.includes("startup") || roleL.includes("creative") || roleL.includes("design")) {
+    toneGuidance = `\nTONE: Keep the conversation casual and energetic. Use phrases like "That's really cool" or "I love that approach." Think startup culture — collaborative and curious.`;
+  } else if (roleL.includes("finance") || roleL.includes("banking") || roleL.includes("legal") || roleL.includes("consulting")) {
+    toneGuidance = `\nTONE: Maintain a professional, structured tone. Be polite but rigorous. Think top-tier consulting or banking interviews — precise and methodical.`;
+  } else {
+    toneGuidance = `\nTONE: Be professional yet warm. Use natural acknowledgments like "That's a great point" or "Interesting approach" between questions. Make it feel like a real human conversation.`;
+  }
+
   return `You are a professional, experienced interviewer conducting a mock interview for a ${level} ${role} position.
+${greeting}
+${toneGuidance}
+
+PERSONALITY GUIDELINES:
+- React naturally to answers: acknowledge good points ("That's insightful"), probe weak ones ("Could you elaborate on that?")
+- Use brief transition phrases between topics, not robotic jumps
+- Refer to ${nameRef}'s specific experiences when moving between subjects
+- Vary your energy: be warmer in opening/closing, more focused in technical/behavioral
 
 CURRENT STATE:
 - Interview Phase: ${phase.toUpperCase()}
@@ -112,17 +137,19 @@ serve(async (req) => {
     // 1. Load interview config
     const { data: interview, error: intErr } = await supabase
       .from("interviews")
-      .select("role, level, cv_url")
+      .select("role, level, cv_url, user_id")
       .eq("id", interviewId)
       .single();
     if (intErr || !interview) throw new Error("Interview not found");
 
-    // 2. Load or create interview state
-    let { data: state } = await supabase
-      .from("interview_state")
-      .select("*")
-      .eq("interview_id", interviewId)
-      .single();
+    // 2. Load candidate name from profiles (parallel with state load)
+    const [profileResult, stateResult] = await Promise.all([
+      supabase.from("profiles").select("full_name").eq("id", interview.user_id).single(),
+      supabase.from("interview_state").select("*").eq("interview_id", interviewId).single(),
+    ]);
+
+    const candidateName = profileResult.data?.full_name || null;
+    let state = stateResult.data;
 
     if (!state) {
       // First call — create state and parse CV if available
@@ -191,7 +218,8 @@ serve(async (req) => {
       state.question_count,
       state.running_scores as Record<string, number>,
       state.topics_covered as string[],
-      state.cv_summary
+      state.cv_summary,
+      candidateName
     );
 
     // 6. Call Lovable AI with tool calling
@@ -204,7 +232,7 @@ serve(async (req) => {
     if (!userMessage || !userMessage.trim()) {
       aiMessages.push({
         role: "user",
-        content: "The interview is starting now. Please greet the candidate warmly and ask your first opening question.",
+        content: `The interview is starting now. Please greet ${candidateName ? candidateName.split(" ")[0] : "the candidate"} warmly and ask your first opening question.`,
       });
     }
 

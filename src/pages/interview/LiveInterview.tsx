@@ -38,6 +38,13 @@ const LiveInterview = () => {
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const userSpeechBuffer = useRef("");
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiSpeakingRef = useRef(false);
+  const pendingUserText = useRef<string[]>([]);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    aiSpeakingRef.current = aiSpeaking;
+  }, [aiSpeaking]);
 
   // Fetch interview details on mount
   useEffect(() => {
@@ -52,26 +59,64 @@ const LiveInterview = () => {
       });
   }, [id]);
 
+  // Pre-create AudioContext on mount (will be resumed on user gesture)
+  useEffect(() => {
+    audioContextRef.current = new AudioContext({ latencyHint: "interactive" });
+    return () => {
+      audioContextRef.current?.close();
+    };
+  }, []);
+
+  // === BARGE-IN: Stop AI audio when user starts speaking ===
+  const stopAiAudio = useCallback(() => {
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.stop();
+      } catch {
+        // already stopped
+      }
+      audioSourceRef.current.disconnect();
+      audioSourceRef.current = null;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    setAiSpeaking(false);
+  }, []);
+
   // Setup ElevenLabs Scribe for real-time STT
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
     onPartialTranscript: (data) => {
-      // Update live partial text display
       userSpeechBuffer.current = data.text;
+      // Barge-in: if AI is speaking and user starts talking, stop the AI
+      if (aiSpeakingRef.current && data.text.trim().length > 3) {
+        stopAiAudio();
+      }
     },
     onCommittedTranscript: (data) => {
-      if (!data.text.trim() || aiSpeaking || processing) return;
+      if (!data.text.trim()) return;
       const text = data.text.trim();
       userSpeechBuffer.current = "";
+
+      // Barge-in: stop AI if still speaking
+      if (aiSpeakingRef.current) {
+        stopAiAudio();
+      }
 
       // Add to transcript display
       setTranscript((prev) => [...prev, { role: "user", text }]);
 
-      // Debounce: wait for silence before sending to orchestrator
+      // Accumulate text segments and debounce
+      pendingUserText.current.push(text);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => {
-        handleUserTurn(text);
+        const fullText = pendingUserText.current.join(" ");
+        pendingUserText.current = [];
+        handleUserTurn(fullText);
       }, 1200);
     },
   });
@@ -98,7 +143,7 @@ const LiveInterview = () => {
   }, [interviewStarted]);
 
   const ensureAudioContext = useCallback(async () => {
-    if (!audioContextRef.current) {
+    if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       audioContextRef.current = new AudioContext({ latencyHint: "interactive" });
     }
     if (audioContextRef.current.state === "suspended") {
@@ -106,11 +151,6 @@ const LiveInterview = () => {
     }
     return audioContextRef.current;
   }, []);
-
-  // Unlock audio context on user interaction (needed for autoplay policy)
-  const unlockAudio = useCallback(async () => {
-    await ensureAudioContext();
-  }, [ensureAudioContext]);
 
   const playTTS = useCallback(async (text: string): Promise<void> => {
     setAiSpeaking(true);
@@ -146,8 +186,12 @@ const LiveInterview = () => {
         throw new Error("Empty audio response");
       }
 
+      // Check if user interrupted while we were fetching
+      if (!aiSpeakingRef.current) return;
+
       try {
         const decoded = await audioContext.decodeAudioData(audioBuffer.slice(0));
+        if (!aiSpeakingRef.current) return; // check again after decode
         await new Promise<void>((resolve) => {
           const source = audioContext.createBufferSource();
           source.buffer = decoded;
@@ -163,6 +207,7 @@ const LiveInterview = () => {
         });
       } catch (decodeError) {
         console.warn("AudioContext decode failed, using HTML audio fallback", decodeError);
+        if (!aiSpeakingRef.current) return;
         const audioBlob = new Blob([audioBuffer], { type: "audio/mpeg" });
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
@@ -172,6 +217,7 @@ const LiveInterview = () => {
         await new Promise<void>((resolve, reject) => {
           audio.onended = () => {
             URL.revokeObjectURL(audioUrl);
+            if (audioRef.current === audio) audioRef.current = null;
             resolve();
           };
           audio.onerror = () => {
@@ -226,18 +272,27 @@ const LiveInterview = () => {
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
     try {
-      // Unlock audio on user gesture (critical for autoplay policy)
-      await unlockAudio();
+      // Resume AudioContext on user gesture (critical for autoplay policy)
+      const audioCtxPromise = ensureAudioContext();
 
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Run mic permission + scribe token + first question in parallel
+      const [, scribeResult, firstQuestionResult] = await Promise.all([
+        Promise.all([
+          audioCtxPromise,
+          navigator.mediaDevices.getUserMedia({ audio: true }),
+        ]),
+        supabase.functions.invoke("elevenlabs-scribe-token"),
+        supabase.functions.invoke("interview-orchestrator", {
+          body: { interviewId: id, userMessage: "" },
+        }),
+      ]);
 
-      // Get scribe token
-      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
-      if (error || !data?.token) throw new Error("No scribe token received");
+      const { data: scribeData, error: scribeError } = scribeResult;
+      if (scribeError || !scribeData?.token) throw new Error("No scribe token received");
 
       // Connect STT
       await scribe.connect({
-        token: data.token,
+        token: scribeData.token,
         microphone: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -247,42 +302,34 @@ const LiveInterview = () => {
       setInterviewStarted(true);
       toast.success("Connected! Starting interview...");
 
-      // Trigger first question from orchestrator
-      await callOrchestrator();
+      // Play the first question that was fetched in parallel
+      const { data: firstQ, error: firstQErr } = firstQuestionResult;
+      if (firstQErr || !firstQ?.next_question) {
+        throw new Error("Failed to get first question");
+      }
+
+      setCurrentPhase(firstQ.phase || "opening");
+      setQuestionCount(firstQ.question_count || 0);
+      setTranscript((prev) => [...prev, { role: "ai", text: firstQ.next_question }]);
+      await playTTS(firstQ.next_question);
     } catch (error) {
       console.error("Failed to start conversation:", error);
       toast.error("Failed to connect. Please check microphone permissions.");
     } finally {
       setIsConnecting(false);
     }
-  }, [scribe, callOrchestrator, unlockAudio]);
+  }, [scribe, ensureAudioContext, id, playTTS]);
 
   const handleEndInterview = useCallback(async () => {
     if (endingRef.current) return;
     endingRef.current = true;
 
-    // Stop audio and STT
-    if (audioSourceRef.current) {
-      try {
-        audioSourceRef.current.stop();
-      } catch {
-        // no-op if source already ended
-      }
-      audioSourceRef.current.disconnect();
-      audioSourceRef.current = null;
-    }
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-
+    stopAiAudio();
     scribe.disconnect();
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
     toast.success("Great work! Processing results...");
 
-    // Update interview status and trigger report generation
     if (id) {
       try {
         await supabase
@@ -290,20 +337,16 @@ const LiveInterview = () => {
           .update({ status: "completed", ended_at: new Date().toISOString() })
           .eq("id", id);
 
-        // Generate AI report (fire and don't block navigation)
         const {
           data: { user },
         } = await supabase.auth.getUser();
         if (user) {
-          // Don't await - let report generate while user navigates to report page (it polls)
           supabase.functions
             .invoke("generate-report", {
               body: { interviewId: id, userId: user.id },
             })
             .then(({ error: reportErr }) => {
-              if (reportErr) {
-                console.error("Report generation failed:", reportErr);
-              }
+              if (reportErr) console.error("Report generation failed:", reportErr);
             });
         }
       } catch (e) {
@@ -311,9 +354,8 @@ const LiveInterview = () => {
       }
     }
 
-    // Navigate immediately - Report page will poll for the report
     navigate(`/report/${id || "demo"}`);
-  }, [scribe, navigate, id]);
+  }, [scribe, navigate, id, stopAiAudio]);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => !prev);
