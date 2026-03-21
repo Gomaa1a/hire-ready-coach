@@ -1,77 +1,80 @@
 
 
-## Plan: Real-Feel Voice Agent + Enhanced Report
+## Plan: Fix Double-Voice Bug + Realistic Interview UI
 
-### Problems Identified
+### Problem 1: Double Voice (Race Condition)
 
-1. **Startup lag**: First question requires sequential orchestrator call (AI thinking ~2-3s) + TTS generation (~1-2s) = ~4-5s of silence after joining
-2. **No barge-in**: When user starts speaking, the AI keeps playing audio — no mechanism to stop TTS mid-playback
-3. **Report is generic**: No market context, no job-specific insights from real hiring data
-4. **Candidate journey feels templated**: Same flow for everyone regardless of CV content
+The `handleUserTurn` → `callOrchestrator` → `playTTS` pipeline has no concurrency guard. If two committed transcripts fire close together (debounce fires while a previous orchestrator call is still running), two TTS streams play simultaneously, creating overlapping voices.
 
----
+**Fix**: Add a `processingRef` mutex lock. Before calling the orchestrator, check if already processing. If so, queue the text and process it after the current turn completes. Also stop any in-flight TTS before starting a new one.
 
-### Changes
+### Problem 2: Unrealistic UI
 
-#### 1. Barge-in: Stop AI when user speaks (LiveInterview.tsx)
+Current UI uses emoji circles (🤖 👤) with a cartoon-like layout. Replace with a professional video-call-inspired design.
 
-- When `onCommittedTranscript` or `onPartialTranscript` fires while `aiSpeaking` is true, immediately:
-  - Stop the `AudioBufferSourceNode` (call `.stop()`)
-  - Stop the HTML5 `Audio` element (call `.pause()`)
-  - Set `aiSpeaking = false`
-  - Send the user's speech to the orchestrator normally
-- This makes the conversation feel natural — user can interrupt just like a real interview
-
-#### 2. Reduce startup lag (LiveInterview.tsx)
-
-- Fire the orchestrator call immediately when `startConversation` begins (don't wait for scribe connection)
-- Run scribe token fetch + mic permission + orchestrator first question **in parallel** using `Promise.all`
-- Pre-create the `AudioContext` on page load (not on join click)
-
-#### 3. Enhanced Report with Job Market Research (generate-report edge function)
-
-- Before generating the report, call Lovable AI with a separate prompt to research/generate market context for the role:
-  - What companies are hiring for this role right now
-  - Key skills employers are looking for
-  - Salary range expectations for the level
-  - Common interview topics at top companies
-- Add new fields to the report tool schema:
-  - `market_insights`: Object with `top_skills`, `salary_range`, `hiring_trends`, `company_tips`
-  - `personalized_tips`: Array of tips specific to the candidate's CV gaps vs market demands
-- Add a new `market_insights` JSONB column to the `reports` table
-
-#### 4. Personalized Candidate Journey (interview-orchestrator)
-
-- Enhance the system prompt to:
-  - Reference the candidate's name (from profiles table)
-  - Use specific CV details in transitions (e.g., "I noticed you worked at X, let's talk about that")
-  - Vary opening style based on role type (casual for startups, formal for finance)
-  - Add personality to the interviewer (brief acknowledgments like "That's a great point" or "Interesting approach")
-- Load the candidate's name from profiles table in the orchestrator
-
-#### 5. Report UI Enhancement (Report.tsx)
-
-- Add a new "Market Insights" section showing:
-  - Top skills card grid
-  - Salary benchmark indicator
-  - "How you compare" section matching candidate scores to market expectations
-  - Personalized action items based on CV gaps
-
----
-
-### Database Migration
-
-```sql
-ALTER TABLE public.reports ADD COLUMN market_insights jsonb DEFAULT NULL;
-```
+**New UI Design**:
+- Full dark background mimicking a video call (like Zoom/Google Meet)
+- AI interviewer: a large centered "avatar card" with subtle animated waveform ring (no emoji — use initials or a professional silhouette icon)
+- Candidate area: minimal bottom bar with mic/end controls
+- Live captions overlay at the bottom (like real-time subtitles in video calls)
+- Phase indicator as a subtle pill in the top-right corner
+- Timer in top-left, minimal
+- Smooth pulse animation on the AI avatar when speaking instead of the separate VoiceVisualizer component
+- "Thinking..." state shows a subtle typing indicator dots animation
 
 ### Files to Edit
 
 | File | Changes |
 |------|---------|
-| `src/pages/interview/LiveInterview.tsx` | Barge-in logic, parallel startup, reduced lag |
-| `supabase/functions/interview-orchestrator/index.ts` | Load candidate name, enhanced personalization in prompt |
-| `supabase/functions/generate-report/index.ts` | Two-step: market research call + enhanced report generation |
-| `src/pages/Report.tsx` | New Market Insights section, personalized tips display |
-| Database migration | Add `market_insights` column to reports |
+| `src/pages/interview/LiveInterview.tsx` | Add processing mutex to prevent double orchestrator calls; complete UI redesign to video-call style |
+| `src/components/interview/InterviewTopBar.tsx` | Simplify to minimal overlay-style top bar |
+
+### Technical Details
+
+**Mutex pattern for orchestrator calls:**
+```typescript
+const orchestratorLockRef = useRef(false);
+const queuedTextRef = useRef<string | null>(null);
+
+const handleUserTurn = async (text: string) => {
+  if (orchestratorLockRef.current) {
+    queuedTextRef.current = text; // overwrite — latest message wins
+    return;
+  }
+  orchestratorLockRef.current = true;
+  stopAiAudio(); // stop any playing audio first
+  await callOrchestrator(text);
+  orchestratorLockRef.current = false;
+  
+  // Process queued message if any
+  if (queuedTextRef.current) {
+    const queued = queuedTextRef.current;
+    queuedTextRef.current = null;
+    await handleUserTurn(queued);
+  }
+};
+```
+
+**UI layout (video-call style):**
+```text
+┌─────────────────────────────────────┐
+│ 🟢 15:00          Technical · Q3    │  ← minimal top overlay
+│                                     │
+│                                     │
+│          ┌───────────┐              │
+│          │           │              │
+│          │    AI     │              │  ← large centered avatar
+│          │  Avatar   │              │     with pulse ring when speaking
+│          │           │              │
+│          └───────────┘              │
+│         "AI Interviewer"            │
+│                                     │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │ Live captions subtitle bar  │    │  ← bottom caption overlay
+│  └─────────────────────────────┘    │
+│                                     │
+│        [🎤]  [📞 End]              │  ← floating controls
+└─────────────────────────────────────┘
+```
 
