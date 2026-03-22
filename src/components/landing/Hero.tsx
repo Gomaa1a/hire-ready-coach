@@ -34,6 +34,9 @@ const Hero = () => {
             Practice with a tough AI interviewer that adapts to your role, experience, and CV.
             Get a detailed performance report after every session.
           </p>
+          <div className="mb-6">
+            <LiveStatsBar />
+          </div>
           <div className="flex flex-wrap gap-4">
             <Link to="/auth/signup" className="neo-btn bg-primary text-primary-foreground text-base">
               Start for Free

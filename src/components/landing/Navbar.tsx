@@ -21,6 +21,7 @@ const Navbar = () => {
           <a href="#how-it-works" className="font-body text-sm font-semibold text-foreground hover:text-primary transition-colors">How it works</a>
           <a href="#features" className="font-body text-sm font-semibold text-foreground hover:text-primary transition-colors">Features</a>
           <a href="#pricing" className="font-body text-sm font-semibold text-foreground hover:text-primary transition-colors">Pricing</a>
+          {user && <LiveStatsBar compact />}
           <Link to="/auth/signup" className="neo-btn bg-primary text-primary-foreground">
             Try for free
           </Link>
