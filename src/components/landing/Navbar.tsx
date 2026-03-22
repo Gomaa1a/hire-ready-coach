@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import Logo from "../Logo";
 import { Menu, X } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import LiveStatsBar from "./LiveStatsBar";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
