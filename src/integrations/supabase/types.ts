@@ -327,7 +327,13 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      platform_stats: {
+        Row: {
+          total_interviews: number | null
+          total_users: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       owns_interview: { Args: { _interview_id: string }; Returns: boolean }

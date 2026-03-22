@@ -2,9 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import Logo from "../Logo";
 import { Menu, X } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import LiveStatsBar from "./LiveStatsBar";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
 
   return (
     <nav className="sticky top-0 z-50 border-b-2 border-ink bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -18,6 +21,7 @@ const Navbar = () => {
           <a href="#how-it-works" className="font-body text-sm font-semibold text-foreground hover:text-primary transition-colors">How it works</a>
           <a href="#features" className="font-body text-sm font-semibold text-foreground hover:text-primary transition-colors">Features</a>
           <a href="#pricing" className="font-body text-sm font-semibold text-foreground hover:text-primary transition-colors">Pricing</a>
+          {user && <LiveStatsBar compact />}
           <Link to="/auth/signup" className="neo-btn bg-primary text-primary-foreground">
             Try for free
           </Link>
