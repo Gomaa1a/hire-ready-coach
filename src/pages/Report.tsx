@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2, TrendingUp, DollarSign, Building2, Lightbulb } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import ShareResults from "@/components/report/ShareResults";
+import { useAuth } from "@/contexts/AuthContext";
+import ShareAchievement from "@/components/report/ShareAchievement";
 
 interface RoadmapItem {
   title: string;
@@ -79,6 +80,7 @@ const scoreEmojis: Record<string, string> = {
 
 const Report = () => {
   const { id } = useParams();
+  const { user } = useAuth();
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -406,15 +408,15 @@ const Report = () => {
           </div>
         )}
 
-        {/* Share Results */}
-        <ShareResults
+        {/* Share Achievement Card */}
+        <ShareAchievement
+          userName={user?.user_metadata?.full_name || "You"}
+          jobTitle={report.interview?.role ?? "General"}
           overallScore={report.overall_score}
-          confScore={report.conf_score}
-          clarityScore={report.clarity_score}
-          structScore={report.struct_score}
           commScore={report.comm_score}
-          role={report.interview?.role ?? "General"}
-          date={formattedDate}
+          confScore={report.conf_score}
+          strengths={report.strengths}
+          reportUrl={window.location.href}
         />
 
         {/* Bottom CTA */}
