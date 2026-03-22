@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2, TrendingUp, DollarSign, Building2, Lightbulb } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import ShareResults from "@/components/report/ShareResults";
+import { useAuth } from "@/contexts/AuthContext";
+import ShareAchievement from "@/components/report/ShareAchievement";
 
 interface RoadmapItem {
   title: string;
