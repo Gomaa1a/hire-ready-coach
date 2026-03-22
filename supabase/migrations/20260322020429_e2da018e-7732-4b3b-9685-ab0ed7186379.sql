@@ -1,0 +1,1 @@
+ALTER TABLE public.interviews ADD COLUMN question_bank jsonb DEFAULT NULL;

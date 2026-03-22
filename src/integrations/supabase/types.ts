@@ -83,6 +83,7 @@ export type Database = {
           ended_at: string | null
           id: string
           level: string
+          question_bank: Json | null
           role: string
           status: string
           user_id: string
@@ -93,6 +94,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           level: string
+          question_bank?: Json | null
           role: string
           status?: string
           user_id: string
@@ -103,6 +105,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           level?: string
+          question_bank?: Json | null
           role?: string
           status?: string
           user_id?: string
