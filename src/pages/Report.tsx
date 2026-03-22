@@ -408,15 +408,15 @@ const Report = () => {
           </div>
         )}
 
-        {/* Share Results */}
-        <ShareResults
+        {/* Share Achievement Card */}
+        <ShareAchievement
+          userName={user?.user_metadata?.full_name || "You"}
+          jobTitle={report.interview?.role ?? "General"}
           overallScore={report.overall_score}
-          confScore={report.conf_score}
-          clarityScore={report.clarity_score}
-          structScore={report.struct_score}
           commScore={report.comm_score}
-          role={report.interview?.role ?? "General"}
-          date={formattedDate}
+          confScore={report.conf_score}
+          strengths={report.strengths}
+          reportUrl={window.location.href}
         />
 
         {/* Bottom CTA */}
