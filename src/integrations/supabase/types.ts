@@ -177,23 +177,47 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          biggest_challenge: string | null
           created_at: string
+          current_role: string | null
+          experience_level: string | null
           full_name: string | null
+          heard_from: string | null
           id: string
+          interview_frequency: string | null
+          onboarding_completed: boolean
+          primary_goal: string | null
+          target_role: string | null
           used_promo_code: string | null
         }
         Insert: {
           avatar_url?: string | null
+          biggest_challenge?: string | null
           created_at?: string
+          current_role?: string | null
+          experience_level?: string | null
           full_name?: string | null
+          heard_from?: string | null
           id: string
+          interview_frequency?: string | null
+          onboarding_completed?: boolean
+          primary_goal?: string | null
+          target_role?: string | null
           used_promo_code?: string | null
         }
         Update: {
           avatar_url?: string | null
+          biggest_challenge?: string | null
           created_at?: string
+          current_role?: string | null
+          experience_level?: string | null
           full_name?: string | null
+          heard_from?: string | null
           id?: string
+          interview_frequency?: string | null
+          onboarding_completed?: boolean
+          primary_goal?: string | null
+          target_role?: string | null
           used_promo_code?: string | null
         }
         Relationships: []

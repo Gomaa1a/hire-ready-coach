@@ -13,6 +13,7 @@ import NewInterview from "./pages/interview/NewInterview";
 import LiveInterview from "./pages/interview/LiveInterview";
 import Report from "./pages/Report";
 import Pricing from "./pages/Pricing";
+import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/interview/new" element={<ProtectedRoute children={<NewInterview />} />} />
             <Route path="/interview/:id" element={<ProtectedRoute children={<LiveInterview />} />} />
             <Route path="/report/:id" element={<ProtectedRoute children={<Report />} />} />
+            <Route path="/onboarding" element={<ProtectedRoute children={<Onboarding />} />} />
             <Route path="/pricing" element={<ProtectedRoute children={<Pricing />} />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
