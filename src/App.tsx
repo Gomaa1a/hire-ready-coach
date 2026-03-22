@@ -13,6 +13,7 @@ import NewInterview from "./pages/interview/NewInterview";
 import LiveInterview from "./pages/interview/LiveInterview";
 import Report from "./pages/Report";
 import Pricing from "./pages/Pricing";
+import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
