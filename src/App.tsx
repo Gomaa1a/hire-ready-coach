@@ -33,6 +33,7 @@ const App = () => (
             <Route path="/interview/new" element={<ProtectedRoute children={<NewInterview />} />} />
             <Route path="/interview/:id" element={<ProtectedRoute children={<LiveInterview />} />} />
             <Route path="/report/:id" element={<ProtectedRoute children={<Report />} />} />
+            <Route path="/onboarding" element={<ProtectedRoute children={<Onboarding />} />} />
             <Route path="/pricing" element={<ProtectedRoute children={<Pricing />} />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
