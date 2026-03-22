@@ -1,12 +1,18 @@
 project_id = "bcwnluiqtacefpjgwjqz"
 
-[functions.elevenlabs-token]
-verify_jwt = false
-
 [functions.generate-report]
 verify_jwt = false
 
 [functions.interview-orchestrator]
+verify_jwt = false
+
+[functions.generate-question-bank]
+verify_jwt = false
+
+[functions.realtime-session-token]
+verify_jwt = false
+
+[functions.elevenlabs-token]
 verify_jwt = false
 
 [functions.elevenlabs-tts-stream]
