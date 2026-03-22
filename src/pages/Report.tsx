@@ -80,6 +80,7 @@ const scoreEmojis: Record<string, string> = {
 
 const Report = () => {
   const { id } = useParams();
+  const { user } = useAuth();
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
