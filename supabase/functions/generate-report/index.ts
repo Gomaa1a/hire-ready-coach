@@ -56,7 +56,7 @@ serve(async (req) => {
     // Fetch interview details + candidate name in parallel
     const [interviewResult, profileResult, messagesResult] = await Promise.all([
       supabase.from("interviews").select("role, level").eq("id", interviewId).single(),
-      supabase.from("profiles").select("full_name").eq("id", userId).single(),
+      supabase.from("profiles").select("full_name, target_role, experience_level, primary_goal, biggest_challenge").eq("id", userId).single(),
       supabase.from("messages").select("role, content").eq("interview_id", interviewId).order("created_at", { ascending: true }),
     ]);
 
