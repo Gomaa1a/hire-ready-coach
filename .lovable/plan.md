@@ -1,89 +1,100 @@
 
 
-## Plan: Add Unique AI Agents to the Platform
+## Security Audit: Weak Points & Fixes
 
-### What We're Building
+### Critical Vulnerability: No Authentication on Edge Functions
 
-Three new AI-powered agents that extend the candidate journey beyond the core interview, making HireReady a full career preparation platform:
+**Every single edge function** in this project has the same flaw: they accept `interviewId` and/or `userId` from the request body but **never verify who is calling**. There is no `Authorization` header check, no `getClaims()`, no identity validation whatsoever.
 
-1. **Pre-Interview Coach Agent** — A voice agent on the lobby/waiting room screen that gives the candidate a 60-second personalized coaching tip before the interview starts (e.g., "For this Senior Software Engineer role, make sure to emphasize system design experience...")
-2. **Report Narrator Agent** — After the report is generated, a "Listen to your debrief" button plays an AI voice walkthrough of the report results, like a personal career coach explaining the scores
-3. **Salary Negotiation Simulator** — A separate page/modal accessible from the report where the candidate practices negotiating a job offer with an AI HR manager voice agent
+This means **anyone with your project URL can**:
+- Generate reports for any user's interview
+- Get OpenAI Realtime session tokens for any interview
+- Read any user's interview data, messages, and profile
+- Trigger the negotiation simulator for any interview
+- Access the pre-interview coach for any session
+- Get platform stats (minor, but still unprotected)
 
-### Technical Details
+All functions use `SUPABASE_SERVICE_ROLE_KEY` (which bypasses RLS entirely), so the database policies you carefully set up are **completely bypassed** by the edge functions.
 
-#### Agent 1: Pre-Interview Coach (Edge Function + Frontend)
+### Other Weak Points
 
-**New edge function: `supabase/functions/pre-interview-coach/index.ts`**
-- Receives `{ interviewId }`, fetches the role, level, and candidate profile (target_role, experience_level, biggest_challenge)
-- Calls Lovable AI (Gemini Flash) to generate a short (3-4 sentence) personalized coaching tip
-- Returns `{ coachingTip: string }`
+1. **No input validation** — Functions trust raw `req.json()` without schema validation (no Zod, no type checks beyond basic null checks)
+2. **`userId` passed from client** — `generate-report` accepts `userId` in the request body instead of extracting it from the JWT. An attacker can pass any user ID.
+3. **CORS allows all origins** — `Access-Control-Allow-Origin: *` means any website can call your functions
+4. **No rate limiting** — Functions can be called unlimited times, burning your OpenAI/ElevenLabs API credits
+5. **Service role key used everywhere** — Even for simple reads that could use the caller's own auth token + RLS
 
-**Frontend: `src/pages/interview/LiveInterview.tsx`**
-- During the lobby phase, after generating question bank, call `pre-interview-coach` edge function
-- Display the coaching tip as an animated text reveal below the interviewer persona card
-- Add a subtle "Coach says:" label with a lightbulb icon
-- The tip appears during the 5-second countdown, giving the candidate something valuable to read while waiting
+### Fix Plan
 
-#### Agent 2: Report Narrator (Edge Function + Frontend)
+**For all 10 edge functions** (`realtime-session-token`, `generate-report`, `generate-question-bank`, `interview-orchestrator`, `pre-interview-coach`, `narrate-report`, `negotiation-session-token`, `score-negotiation`, `elevenlabs-token`, `elevenlabs-scribe-token`):
 
-**New edge function: `supabase/functions/narrate-report/index.ts`**
-- Receives `{ interviewId }`, fetches the report data from the `reports` table
-- Builds a natural script: "Hey [name], let me walk you through your results. You scored [X]% overall — here's what stood out..."
-- Calls ElevenLabs TTS API (already have ELEVENLABS_API_KEY) to generate audio
-- Returns the audio as a base64 string or streams it
+Add this authentication block at the top of each function:
 
-**Frontend: `src/pages/Report.tsx`**
-- Add a "Listen to Your Debrief" button at the top of the report (below header)
-- On click, fetch audio from the edge function, play it using an `<audio>` element
-- Show a mini player bar with play/pause, progress, and a pulsing avatar while playing
-- The narration covers: overall score, top strength, biggest area to improve, and one roadmap item
+```typescript
+// 1. Extract and validate the caller's identity
+const authHeader = req.headers.get("Authorization");
+if (!authHeader?.startsWith("Bearer ")) {
+  return new Response(JSON.stringify({ error: "Unauthorized" }), 
+    { status: 401, headers: corsHeaders });
+}
 
-#### Agent 3: Salary Negotiation Simulator (Edge Function + Page)
+const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { headers: { Authorization: authHeader } }
+});
 
-**New edge function: `supabase/functions/negotiation-session-token/index.ts`**
-- Similar to `realtime-session-token` but with a different system prompt
-- The AI plays an HR manager making a job offer for the candidate's role
-- Instructions: present an offer (salary from market_insights), let candidate negotiate, respond realistically, after 3-4 exchanges wrap up and give feedback on negotiation skills
-- Uses OpenAI Realtime API (same WebRTC approach as the interview)
+const token = authHeader.replace("Bearer ", "");
+const { data: claims, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
+if (claimsErr || !claims?.claims) {
+  return new Response(JSON.stringify({ error: "Unauthorized" }), 
+    { status: 401, headers: corsHeaders });
+}
 
-**New page: `src/pages/interview/NegotiationSim.tsx`**
-- Accessible from the Report page via a "Practice Negotiation" button
-- Reuses the same dark video-call UI from LiveInterview (interviewer avatar, captions, controls)
-- Different persona: "HR Manager" type (uses `generatePersona` with HR-related titles)
-- Shorter session: 5-minute timer instead of 15
-- After ending, shows a brief scorecard (assertiveness, professionalism, outcome) — generated via Lovable AI edge function call
+const callerUserId = claims.claims.sub;
 
-**New edge function: `supabase/functions/score-negotiation/index.ts`**
-- Takes the negotiation transcript, scores on: assertiveness (0-100), professionalism (0-100), negotiation outcome (accepted/countered/rejected), and 2-3 tips
-- Returns structured JSON, displayed on a simple results card
+// 2. Use callerUserId instead of trusting req.body.userId
+// 3. Verify caller owns the interviewId before proceeding
+```
 
-**Database migration:**
-- Add `negotiation_sessions` table: `id`, `interview_id`, `user_id`, `created_at`, `ended_at`, `assertiveness_score`, `professionalism_score`, `outcome`, `tips` (jsonb)
+**Specific changes per function:**
 
-**Route:** Add `/negotiation/:interviewId` to App.tsx
+| Function | Fix |
+|----------|-----|
+| `realtime-session-token` | Verify `interview.user_id === callerUserId` before issuing OpenAI token |
+| `generate-report` | Remove `userId` from request body, use `callerUserId` from JWT instead |
+| `generate-question-bank` | Verify caller owns the interview |
+| `interview-orchestrator` | Verify caller owns the interview |
+| `pre-interview-coach` | Verify caller owns the interview |
+| `narrate-report` | Verify caller owns the interview |
+| `negotiation-session-token` | Verify caller owns the interview |
+| `score-negotiation` | Verify caller owns the interview (or negotiation session) |
+| `elevenlabs-token` | Verify caller owns the interview |
+| `elevenlabs-scribe-token` | Add auth check (currently has zero validation) |
+| `get-platform-stats` | Keep public (no auth needed) but add basic rate-limit header |
 
-**InterviewerPersona.ts update:**
-- Add HR-specific title category: "HR Director", "VP of People", "Compensation Manager", "Head of Talent"
+**Input validation** — Add Zod schema validation to each function:
+```typescript
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+
+const schema = z.object({
+  interviewId: z.string().uuid(),
+});
+const parsed = schema.safeParse(await req.json());
+if (!parsed.success) {
+  return new Response(JSON.stringify({ error: "Invalid input" }), 
+    { status: 400, headers: corsHeaders });
+}
+```
+
+**Frontend update** — The `supabase.functions.invoke()` calls already send the auth header automatically, so no frontend changes needed for authentication. Only `generate-report` needs a small change to stop sending `userId` in the body.
 
 ### Changes Summary
 
 | File | Change |
 |------|--------|
-| `supabase/functions/pre-interview-coach/index.ts` | New — generates personalized coaching tip |
-| `supabase/functions/narrate-report/index.ts` | New — generates TTS audio walkthrough of report |
-| `supabase/functions/negotiation-session-token/index.ts` | New — OpenAI Realtime session for salary negotiation |
-| `supabase/functions/score-negotiation/index.ts` | New — scores negotiation transcript |
-| `src/pages/interview/LiveInterview.tsx` | Add coaching tip display in lobby phase |
-| `src/pages/Report.tsx` | Add "Listen to Debrief" button + audio player, "Practice Negotiation" button |
-| `src/pages/interview/NegotiationSim.tsx` | New — salary negotiation voice simulator page |
-| `src/components/interview/InterviewerPersona.ts` | Add HR title category |
-| `src/App.tsx` | Add `/negotiation/:interviewId` route |
-| Database migration | New `negotiation_sessions` table |
+| All 10 edge functions | Add JWT validation + ownership check + Zod input validation |
+| `supabase/functions/generate-report/index.ts` | Use caller's JWT `sub` instead of `req.body.userId` |
+| `src/pages/Report.tsx` (or wherever generate-report is called) | Remove `userId` from the request body |
+| `get-platform-stats` | Keep public, no auth needed |
 
-### What Makes This Unique
-
-- **Pre-Interview Coach**: No other platform gives you a personalized pep talk before the interview starts — it reduces anxiety and primes the candidate
-- **Report Narrator**: Hearing your results explained by a voice coach is far more engaging than reading a wall of text — "Spotify Wrapped" for interviews
-- **Salary Negotiation**: This is the feature no competitor has — candidates practice the hardest conversation (money talk) in a safe environment with AI feedback
+No database changes required — the RLS policies are already correct, the problem is that edge functions bypass them entirely by using the service role key without verifying the caller first.
 
