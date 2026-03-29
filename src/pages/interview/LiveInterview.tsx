@@ -23,6 +23,7 @@ const LiveInterview = () => {
     isAISpeaking,
     conversationLog,
     connectionStatus,
+    getStream,
   } = useRealtimeInterview();
 
   // Load interview data
