@@ -55,6 +55,13 @@ const TITLE_MAP: Record<string, string[]> = {
     "Head of Brand Strategy",
     "CMO",
   ],
+  hr: [
+    "HR Director",
+    "VP of People",
+    "Compensation Manager",
+    "Head of Talent",
+    "Senior HR Business Partner",
+  ],
 };
 
 const COMPANIES = [
