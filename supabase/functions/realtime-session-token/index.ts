@@ -24,12 +24,6 @@ serve(async (req) => {
     if (!interviewId) throw new Error("interviewId is required");
 
     // Fetch interview with question bank
-    const [interviewResult, profileResult] = await Promise.all([
-      supabase.from("interviews").select("role, level, question_bank, user_id").eq("id", interviewId).single(),
-      // We'll get profile after we have user_id
-    ]);
-
-    // Need interview first to get user_id for profile
     const { data: interview, error: intErr } = await supabase
       .from("interviews")
       .select("role, level, question_bank, user_id")

@@ -227,5 +227,6 @@ export function useRealtimeInterview() {
     isAISpeaking,
     conversationLog,
     connectionStatus,
+    getStream,
   };
 }
