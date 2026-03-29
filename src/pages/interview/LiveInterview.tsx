@@ -78,7 +78,7 @@ const LiveInterview = () => {
           setPhase("active");
           startTimeRef.current = Date.now();
           if (id) {
-            startSession(id).catch((err) => {
+            startSession(id, undefined, persona ? { name: persona.name, title: persona.title, company: persona.company } : undefined).catch((err) => {
               console.error("Failed to start session:", err);
               toast.error("Connection failed. Please try again.");
               setPhase("pre-join");
@@ -102,11 +102,11 @@ const LiveInterview = () => {
       setPersona(p);
 
       // Generate question bank
-      toast.info("Preparing your interview questions...");
+      toast.info("Preparing your interview...");
       const { error: qbErr } = await supabase.functions.invoke("generate-question-bank", {
         body: { interviewId: id },
       });
-      if (qbErr) throw new Error("Failed to generate questions");
+      if (qbErr) throw new Error("Failed to prepare interview");
 
       // Enter lobby phase
       setLobbyCountdown(5);
@@ -145,7 +145,7 @@ const LiveInterview = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           supabase.functions
-            .invoke("generate-report", { body: { interviewId: id, userId: user.id } })
+            .invoke("generate-report", { body: { interviewId: id } })
             .then(({ error }) => {
               if (error) console.error("Report generation failed:", error);
             });
@@ -188,7 +188,7 @@ const LiveInterview = () => {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const questionsAnswered = conversationLog.filter((e) => e.role === "user").length;
+  const topicsDiscussed = conversationLog.filter((e) => e.role === "user").length;
 
   const pct = timeLeft / 900;
   const timerColor = pct > 0.4 ? "text-green-400" : pct > 0.15 ? "text-amber-400" : "text-red-400";
@@ -321,8 +321,8 @@ const LiveInterview = () => {
             </div>
             <div className="h-8 w-px bg-white/10" />
             <div className="text-center">
-              <p className="text-2xl font-bold text-white tabular-nums">{questionsAnswered}</p>
-              <p className="text-xs text-white/40 mt-1">Questions Answered</p>
+              <p className="text-2xl font-bold text-white tabular-nums">{topicsDiscussed}</p>
+              <p className="text-xs text-white/40 mt-1">Responses</p>
             </div>
           </div>
 

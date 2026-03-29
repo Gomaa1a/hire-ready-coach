@@ -10,6 +10,11 @@ const corsHeaders = {
 
 const bodySchema = z.object({
   interviewId: z.string().uuid(),
+  persona: z.object({
+    name: z.string(),
+    title: z.string(),
+    company: z.string(),
+  }).optional(),
 });
 
 serve(async (req) => {
@@ -43,11 +48,11 @@ serve(async (req) => {
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const { interviewId } = parsed.data;
+    const { interviewId, persona } = parsed.data;
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Fetch interview with question bank
+    // Fetch interview with topic guide
     const { data: interview, error: intErr } = await supabase
       .from("interviews")
       .select("role, level, question_bank, user_id")
@@ -61,7 +66,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    if (!interview.question_bank) throw new Error("Question bank not generated yet");
+    if (!interview.question_bank) throw new Error("Topic guide not generated yet");
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -70,32 +75,62 @@ serve(async (req) => {
       .single();
 
     const candidateName = profile?.full_name || "the candidate";
-    const qb = interview.question_bank as any;
+    const firstName = candidateName.split(" ")[0];
+    const guide = interview.question_bank as any;
 
-    // Build instructions from question bank
-    const questionsFormatted = qb.questions
-      .map((q: any, i: number) => `${i + 1}. ${q.question}`)
+    // Build persona identity
+    const personaName = persona?.name || "Alex Morgan";
+    const personaTitle = persona?.title || "Senior Hiring Manager";
+    const personaCompany = persona?.company || "the company";
+
+    // Build competency briefing from topic guide
+    const competenciesBrief = (guide.competencies || [])
+      .map((c: any) => {
+        const signals = (c.signals_to_look_for || []).join(", ");
+        const flags = (c.red_flags || []).join(", ");
+        return `• ${c.area} (${c.depth_level} depth): ${c.why}. Look for: ${signals}. Red flags: ${flags}`;
+      })
       .join("\n");
 
-    const instructions = `You are a professional job interviewer conducting a real interview for the position of ${interview.role} at ${interview.level} level. The candidate's name is ${candidateName}. Be warm but professional. Never break character.
+    const highlightsBrief = (guide.candidate_highlights || [])
+      .map((h: string) => `• ${h}`)
+      .join("\n");
 
-Start with this exact opening: "${qb.opening}"
+    const icebreaker = guide.suggested_icebreaker || `Tell me about your background and what brought you here today.`;
+    const levelExpectations = guide.level_expectations || "";
 
-Then ask these questions one by one. Wait for the candidate to fully finish before responding. After each answer, you may ask one follow-up if relevant, then move to the next question:
-${questionsFormatted}
+    const instructions = `You are ${personaName}, ${personaTitle} at ${personaCompany}. You are conducting a live voice interview for a ${interview.level} ${interview.role} position.
 
-End the interview with: "${qb.closing}"
+The candidate's name is ${candidateName}. Address them as "${firstName}" naturally throughout the conversation.
 
-Important rules:
-- Address the candidate by their first name "${candidateName.split(" ")[0]}" naturally
-- Keep your responses short and natural, like a real interviewer
-- Never list all questions at once
-- React naturally to answers (say things like "That's interesting", "Tell me more about that", "Great point")
-- If the candidate goes off topic, gently redirect them
-- Do not evaluate answers out loud during the interview
-- Speak naturally and conversationally — you are having a real voice conversation
-- Use brief transition phrases between topics
-- If an answer is vague, probe deeper with a follow-up before moving on`;
+CANDIDATE CONTEXT:
+${highlightsBrief ? `Key highlights from their background:\n${highlightsBrief}` : "No CV provided — discover their background through conversation."}
+
+COMPETENCY AREAS TO EXPLORE:
+${competenciesBrief || "Cover technical depth, problem-solving, collaboration, and motivation."}
+
+${levelExpectations ? `LEVEL CALIBRATION:\n${levelExpectations}\n` : ""}
+YOUR INTERVIEW APPROACH:
+- Start with a warm, brief intro of yourself and the company, then ease in with this icebreaker: "${icebreaker}"
+- Cover 5-6 topics naturally over ~15 minutes. You don't need to hit every competency — prioritize based on what the conversation reveals
+- Listen actively — when something interesting comes up, dig deeper with 2-3 follow-ups before moving on. Don't just accept surface-level answers
+- If the candidate mentions a project, challenge, or decision, ask specifics: "What was your specific role?", "What trade-offs did you consider?", "What would you do differently now?"
+- Adapt difficulty based on their responses — if they handle something easily, push harder. If they struggle, pivot gracefully to a different angle
+- Use natural transitions: "That reminds me...", "Building on what you said about...", "Interesting — that actually connects to something I wanted to explore..."
+- React genuinely before asking the next thing: "That's a great example", "I can see why that was challenging", "That's an interesting approach"
+- If an answer is vague, probe: "Can you walk me through a specific example?", "What did that look like in practice?"
+- Manage time naturally — don't rush, but if one topic is consuming too much time, gracefully transition
+- Near the end (~12-13 minutes in), wrap up current topic and ask: "Before we wrap up, is there anything you'd like to ask me about the role or the team?"
+- Close warmly and naturally
+
+CRITICAL RULES:
+- NEVER list multiple questions at once
+- NEVER say "next question", "moving on to question 3", or anything that reveals a script
+- NEVER evaluate or score answers out loud during the interview
+- NEVER break character — you are a real person having a real conversation
+- Speak naturally and conversationally — use filler words occasionally ("So...", "Right...", "Yeah...")
+- Keep your responses SHORT — a real interviewer mostly listens. Your turns should be 1-3 sentences, not paragraphs
+- When the conversation has reached a natural conclusion or ~15 minutes have passed, let the candidate know the interview is wrapping up, thank them, and mention they can click the "End" button to finish the session`;
 
     // Create ephemeral token via OpenAI
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {

@@ -25,7 +25,7 @@ export function useRealtimeInterview() {
   // Expose stream ref for mute control
   const getStream = useCallback(() => streamRef.current, []);
 
-  const startSession = useCallback(async (interviewId: string, preGeneratedToken?: string) => {
+  const startSession = useCallback(async (interviewId: string, preGeneratedToken?: string, persona?: { name: string; title: string; company: string }) => {
     interviewIdRef.current = interviewId;
     setConnectionStatus("connecting");
 
@@ -36,7 +36,7 @@ export function useRealtimeInterview() {
       if (!ephemeralToken) {
         const { data: tokenData, error: tokenErr } = await supabase.functions.invoke(
           "realtime-session-token",
-          { body: { interviewId } }
+          { body: { interviewId, persona } }
         );
 
         if (tokenErr || !tokenData?.ephemeralToken) {
