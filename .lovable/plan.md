@@ -1,100 +1,112 @@
 
 
-## Security Audit: Weak Points & Fixes
+## Plan: Make the Interview Genuinely Conversational
 
-### Critical Vulnerability: No Authentication on Edge Functions
+### The Problem
 
-**Every single edge function** in this project has the same flaw: they accept `interviewId` and/or `userId` from the request body but **never verify who is calling**. There is no `Authorization` header check, no `getClaims()`, no identity validation whatsoever.
+Right now the flow is:
+1. Pre-generate 6-8 questions → store in `interviews.question_bank`
+2. Feed those exact questions as a numbered list into the Realtime agent's system prompt: *"ask these questions one by one"*
+3. Agent reads the script
 
-This means **anyone with your project URL can**:
-- Generate reports for any user's interview
-- Get OpenAI Realtime session tokens for any interview
-- Read any user's interview data, messages, and profile
-- Trigger the negotiation simulator for any interview
-- Access the pre-interview coach for any session
-- Get platform stats (minor, but still unprotected)
+This is a **teleprompter, not an interviewer**. A real interviewer adapts — they dig deeper when an answer is interesting, skip questions when the candidate already covered them, and the conversation flows naturally.
 
-All functions use `SUPABASE_SERVICE_ROLE_KEY` (which bypasses RLS entirely), so the database policies you carefully set up are **completely bypassed** by the edge functions.
+### The Fix
 
-### Other Weak Points
+**Stop feeding a script. Give the agent context and let it think.**
 
-1. **No input validation** — Functions trust raw `req.json()` without schema validation (no Zod, no type checks beyond basic null checks)
-2. **`userId` passed from client** — `generate-report` accepts `userId` in the request body instead of extracting it from the JWT. An attacker can pass any user ID.
-3. **CORS allows all origins** — `Access-Control-Allow-Origin: *` means any website can call your functions
-4. **No rate limiting** — Functions can be called unlimited times, burning your OpenAI/ElevenLabs API credits
-5. **Service role key used everywhere** — Even for simple reads that could use the caller's own auth token + RLS
+Instead of a numbered question list, the system prompt should describe:
+- The role, level, and what skills/competencies matter
+- The candidate's CV summary (already parsed)
+- Interview guidelines (how many topics to cover, time budget, depth expectations)
+- Evaluation criteria (what to probe for)
 
-### Fix Plan
+The agent then **generates its own questions in real-time** based on what the candidate actually says. This is what OpenAI Realtime is designed for — it's a reasoning model, not a text-to-speech reader.
 
-**For all 10 edge functions** (`realtime-session-token`, `generate-report`, `generate-question-bank`, `interview-orchestrator`, `pre-interview-coach`, `narrate-report`, `negotiation-session-token`, `score-negotiation`, `elevenlabs-token`, `elevenlabs-scribe-token`):
+### Technical Changes
 
-Add this authentication block at the top of each function:
+**File: `supabase/functions/realtime-session-token/index.ts`**
 
-```typescript
-// 1. Extract and validate the caller's identity
-const authHeader = req.headers.get("Authorization");
-if (!authHeader?.startsWith("Bearer ")) {
-  return new Response(JSON.stringify({ error: "Unauthorized" }), 
-    { status: 401, headers: corsHeaders });
-}
+Replace the current instructions that list questions with a **role briefing** prompt:
 
-const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  global: { headers: { Authorization: authHeader } }
-});
+```
+You are [Persona Name], [Title] at [Company], conducting a live interview 
+for a [Level] [Role] position.
 
-const token = authHeader.replace("Bearer ", "");
-const { data: claims, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
-if (claimsErr || !claims?.claims) {
-  return new Response(JSON.stringify({ error: "Unauthorized" }), 
-    { status: 401, headers: corsHeaders });
-}
+CANDIDATE CONTEXT:
+- Name: [name]
+- CV highlights: [parsed CV summary — key skills, experience, notable projects]
 
-const callerUserId = claims.claims.sub;
+YOUR INTERVIEW APPROACH:
+- Start with a warm intro and an easy icebreaker about their background
+- Cover 5-6 topics across: technical depth, problem-solving, collaboration, 
+  leadership (if senior+), and motivation
+- Listen actively — when something interesting comes up, dig deeper with 
+  follow-ups. Don't just move to the next topic mechanically
+- If the candidate mentions a project or challenge, ask specifics: 
+  "What was your role?", "What would you do differently?"
+- Adapt difficulty based on their responses — if they handle something 
+  easily, push harder. If they struggle, pivot gracefully
+- Keep the conversation natural. Use transitions like "That reminds me..." 
+  or "Building on that..."
+- You have about 15 minutes. Manage time naturally — don't rush, 
+  but don't let one topic consume the whole session
+- End by asking if they have questions, then close warmly
 
-// 2. Use callerUserId instead of trusting req.body.userId
-// 3. Verify caller owns the interviewId before proceeding
+RULES:
+- Never list multiple questions at once
+- Never say "next question" or "moving on to question 3"
+- React genuinely to answers before asking the next thing
+- If an answer is vague, probe: "Can you give me a specific example?"
+- Never evaluate or score answers during the conversation
 ```
 
-**Specific changes per function:**
+**File: `supabase/functions/generate-question-bank/index.ts`**
 
-| Function | Fix |
-|----------|-----|
-| `realtime-session-token` | Verify `interview.user_id === callerUserId` before issuing OpenAI token |
-| `generate-report` | Remove `userId` from request body, use `callerUserId` from JWT instead |
-| `generate-question-bank` | Verify caller owns the interview |
-| `interview-orchestrator` | Verify caller owns the interview |
-| `pre-interview-coach` | Verify caller owns the interview |
-| `narrate-report` | Verify caller owns the interview |
-| `negotiation-session-token` | Verify caller owns the interview |
-| `score-negotiation` | Verify caller owns the interview (or negotiation session) |
-| `elevenlabs-token` | Verify caller owns the interview |
-| `elevenlabs-scribe-token` | Add auth check (currently has zero validation) |
-| `get-platform-stats` | Keep public (no auth needed) but add basic rate-limit header |
+Repurpose this function. Instead of generating exact questions, generate a **topic guide** — a set of competency areas and evaluation signals the agent should explore. This still gets stored in `interviews.question_bank` but serves as a reference for the system prompt, not a script.
 
-**Input validation** — Add Zod schema validation to each function:
-```typescript
-import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-
-const schema = z.object({
-  interviewId: z.string().uuid(),
-});
-const parsed = schema.safeParse(await req.json());
-if (!parsed.success) {
-  return new Response(JSON.stringify({ error: "Invalid input" }), 
-    { status: 400, headers: corsHeaders });
+The output structure changes from:
+```json
+{ "opening": "...", "questions": [...], "closing": "..." }
+```
+to:
+```json
+{
+  "competencies": [
+    {
+      "area": "System Design",
+      "why": "Critical for senior backend roles",
+      "signals_to_look_for": ["trade-off reasoning", "scalability awareness"],
+      "red_flags": ["no mention of constraints", "textbook answers only"]
+    }
+  ],
+  "candidate_highlights": ["Led migration at X Corp", "Open source contributor to Y"],
+  "suggested_icebreaker": "I saw you worked on the migration at X Corp — tell me about that"
 }
 ```
 
-**Frontend update** — The `supabase.functions.invoke()` calls already send the auth header automatically, so no frontend changes needed for authentication. Only `generate-report` needs a small change to stop sending `userId` in the body.
+**File: `src/pages/interview/LiveInterview.tsx`**
+
+- Remove any logic that depends on `question_bank.questions.length` for progress tracking
+- The lobby phase still calls `generate-question-bank` (now generates topic guide) and `pre-interview-coach`
+- Everything else stays the same — the Realtime connection, barge-in, captions, persona display
+
+### What This Changes for the Candidate
+
+| Before | After |
+|--------|-------|
+| AI asks Q1, waits, asks Q2, waits... | AI responds to what you say and explores organically |
+| Same 6 questions every time for same role | Different conversation every time based on your answers |
+| "Moving on to the next question" | "That's interesting — tell me more about the scaling challenge" |
+| Feels like a quiz | Feels like talking to a senior hiring manager |
 
 ### Changes Summary
 
 | File | Change |
 |------|--------|
-| All 10 edge functions | Add JWT validation + ownership check + Zod input validation |
-| `supabase/functions/generate-report/index.ts` | Use caller's JWT `sub` instead of `req.body.userId` |
-| `src/pages/Report.tsx` (or wherever generate-report is called) | Remove `userId` from the request body |
-| `get-platform-stats` | Keep public, no auth needed |
+| `supabase/functions/realtime-session-token/index.ts` | Replace scripted question list with conversational role briefing + CV context + competency areas |
+| `supabase/functions/generate-question-bank/index.ts` | Generate competency topic guide instead of literal questions |
+| `src/pages/interview/LiveInterview.tsx` | Minor — remove any question-count-based progress logic |
 
-No database changes required — the RLS policies are already correct, the problem is that edge functions bypass them entirely by using the service role key without verifying the caller first.
+No database schema changes needed. The `question_bank` column (jsonb) stores the new format without migration.
 
