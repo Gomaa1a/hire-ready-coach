@@ -111,6 +111,13 @@ const LiveInterview = () => {
       // Enter lobby phase
       setLobbyCountdown(5);
       setPhase("lobby");
+
+      // Fetch coaching tip in background (non-blocking)
+      supabase.functions.invoke("pre-interview-coach", {
+        body: { interviewId: id },
+      }).then(({ data }) => {
+        if (data?.coachingTip) setCoachingTip(data.coachingTip);
+      }).catch(() => {}); // silent fail — tip is optional
     } catch (err: any) {
       console.error("Failed to start:", err);
       toast.error("Failed to prepare. Please try again.");
