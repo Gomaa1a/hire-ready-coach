@@ -85,8 +85,10 @@ const Report = () => {
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [retrying, setRetrying] = useState(false);
+  const [narrationLoading, setNarrationLoading] = useState(false);
+  const [narrationPlaying, setNarrationPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const fetchReport = useCallback(async () => {
     if (!id) {
