@@ -1,11 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const bodySchema = z.object({
+  interviewId: z.string().uuid(),
+});
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -17,11 +22,30 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { interviewId } = await req.json();
-    if (!interviewId) throw new Error("interviewId is required");
+    // Auth check
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claims, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
+    if (claimsErr || !claims?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const callerUserId = claims.claims.sub as string;
+
+    // Input validation
+    const parsed = bodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const { interviewId } = parsed.data;
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Fetch interview details + CV
     const { data: interview, error: intErr } = await supabase
@@ -31,6 +55,11 @@ serve(async (req) => {
       .single();
 
     if (intErr || !interview) throw new Error("Interview not found");
+
+    // Ownership check
+    if (interview.user_id !== callerUserId) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Parse CV if available
     let cvContext = "";
@@ -79,41 +108,23 @@ serve(async (req) => {
               parameters: {
                 type: "object",
                 properties: {
-                  opening: {
-                    type: "string",
-                    description: "A warm, professional opening statement the AI interviewer will say at the start. Include greeting and brief intro about the interview format.",
-                  },
+                  opening: { type: "string", description: "A warm, professional opening statement the AI interviewer will say at the start." },
                   questions: {
                     type: "array",
                     items: {
                       type: "object",
                       properties: {
-                        id: { type: "string", description: "Unique question ID like q1, q2, etc." },
-                        question: { type: "string", description: "The interview question to ask" },
-                        followUps: {
-                          type: "array",
-                          items: { type: "string" },
-                          description: "2 potential follow-up questions",
-                        },
-                        goodAnswerSignals: {
-                          type: "array",
-                          items: { type: "string" },
-                          description: "Signals of a good answer",
-                        },
-                        redFlags: {
-                          type: "array",
-                          items: { type: "string" },
-                          description: "Red flags to watch for",
-                        },
+                        id: { type: "string" },
+                        question: { type: "string" },
+                        followUps: { type: "array", items: { type: "string" } },
+                        goodAnswerSignals: { type: "array", items: { type: "string" } },
+                        redFlags: { type: "array", items: { type: "string" } },
                       },
                       required: ["id", "question", "followUps", "goodAnswerSignals", "redFlags"],
                       additionalProperties: false,
                     },
                   },
-                  closing: {
-                    type: "string",
-                    description: "A warm closing statement the AI will say at the end of the interview.",
-                  },
+                  closing: { type: "string", description: "A warm closing statement." },
                 },
                 required: ["opening", "questions", "closing"],
                 additionalProperties: false,
@@ -127,16 +138,10 @@ serve(async (req) => {
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Usage limit reached" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({ error: "Usage limit reached" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       const errText = await response.text();
       console.error("AI error:", response.status, errText);

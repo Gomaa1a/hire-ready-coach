@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +9,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Sarah voice - warm professional female narrator
+const bodySchema = z.object({
+  interviewId: z.string().uuid(),
+});
+
 const NARRATOR_VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
 
 serve(async (req) => {
@@ -21,11 +25,30 @@ serve(async (req) => {
     if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not configured");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { interviewId } = await req.json();
-    if (!interviewId) throw new Error("interviewId is required");
+    // Auth check
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claims, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
+    if (claimsErr || !claims?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const callerUserId = claims.claims.sub as string;
+
+    // Input validation
+    const parsed = bodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: "Invalid input" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const { interviewId } = parsed.data;
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Fetch report
     const { data: report, error: repErr } = await supabase
@@ -37,24 +60,25 @@ serve(async (req) => {
     if (repErr || !report) throw new Error("Report not found");
 
     const interview = Array.isArray(report.interviews) ? report.interviews[0] : report.interviews;
-    const userId = interview?.user_id;
+
+    // Ownership check
+    if (interview?.user_id !== callerUserId) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Fetch profile for name
     let candidateName = "there";
-    if (userId) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", userId)
-        .single();
-      candidateName = profile?.full_name?.split(" ")[0] || "there";
-    }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", callerUserId)
+      .single();
+    candidateName = profile?.full_name?.split(" ")[0] || "there";
 
     const strengths = (report.strengths as string[]) || [];
     const weaknesses = (report.weaknesses as string[]) || [];
     const roadmap = (report.roadmap as any[]) || [];
 
-    // Build narration script
     const script = `Hey ${candidateName}! Let me walk you through your interview results.
 
 You scored ${report.overall_score} percent overall for the ${interview?.role || "interview"} position — ${
@@ -75,7 +99,6 @@ ${roadmap.length > 0 ? `My top recommendation for you: focus on ${roadmap[0].tit
 
 Keep practicing, and you'll see real improvement. You've got this!`;
 
-    // Call ElevenLabs TTS
     const ttsResponse = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${NARRATOR_VOICE_ID}?output_format=mp3_44100_128`,
       {
@@ -87,13 +110,7 @@ Keep practicing, and you'll see real improvement. You've got this!`;
         body: JSON.stringify({
           text: script,
           model_id: "eleven_turbo_v2_5",
-          voice_settings: {
-            stability: 0.6,
-            similarity_boost: 0.8,
-            style: 0.4,
-            use_speaker_boost: true,
-            speed: 1.0,
-          },
+          voice_settings: { stability: 0.6, similarity_boost: 0.8, style: 0.4, use_speaker_boost: true, speed: 1.0 },
         }),
       }
     );

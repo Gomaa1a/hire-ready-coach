@@ -1,11 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const bodySchema = z.object({
+  interviewId: z.string().uuid(),
+});
 
 async function callAI(apiKey: string, messages: any[], tools?: any[], toolChoice?: any) {
   const body: any = {
@@ -46,21 +51,45 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const { interviewId, userId } = await req.json();
-    if (!interviewId || !userId) throw new Error("interviewId and userId are required");
+    // Auth check
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claims, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
+    if (claimsErr || !claims?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const callerUserId = claims.claims.sub as string;
+
+    // Input validation
+    const parsed = bodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const { interviewId } = parsed.data;
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Fetch interview details + candidate name in parallel
     const [interviewResult, profileResult, messagesResult] = await Promise.all([
-      supabase.from("interviews").select("role, level").eq("id", interviewId).single(),
-      supabase.from("profiles").select("full_name, target_role, experience_level, primary_goal, biggest_challenge").eq("id", userId).single(),
+      supabase.from("interviews").select("role, level, user_id").eq("id", interviewId).single(),
+      supabase.from("profiles").select("full_name, target_role, experience_level, primary_goal, biggest_challenge").eq("id", callerUserId).single(),
       supabase.from("messages").select("role, content").eq("interview_id", interviewId).order("created_at", { ascending: true }),
     ]);
 
     if (interviewResult.error) throw new Error(`Failed to fetch interview: ${interviewResult.error.message}`);
+
+    // Ownership check
+    if (interviewResult.data.user_id !== callerUserId) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (messagesResult.error) throw new Error(`Failed to fetch messages: ${messagesResult.error.message}`);
     if (!messagesResult.data || messagesResult.data.length === 0) throw new Error("No transcript found");
 
@@ -96,11 +125,7 @@ serve(async (req) => {
             parameters: {
               type: "object",
               properties: {
-                top_skills: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "6-8 most in-demand skills for this role",
-                },
+                top_skills: { type: "array", items: { type: "string" }, description: "6-8 most in-demand skills for this role" },
                 salary_range: {
                   type: "object",
                   properties: {
@@ -111,21 +136,9 @@ serve(async (req) => {
                   required: ["min", "max", "currency"],
                   additionalProperties: false,
                 },
-                hiring_trends: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "3-4 current hiring trends for this role",
-                },
-                company_tips: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "3-4 tips for standing out when applying to top companies",
-                },
-                top_companies: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "5-6 companies actively hiring for this role",
-                },
+                hiring_trends: { type: "array", items: { type: "string" }, description: "3-4 current hiring trends for this role" },
+                company_tips: { type: "array", items: { type: "string" }, description: "3-4 tips for standing out when applying to top companies" },
+                top_companies: { type: "array", items: { type: "string" }, description: "5-6 companies actively hiring for this role" },
               },
               required: ["top_skills", "salary_range", "hiring_trends", "company_tips", "top_companies"],
               additionalProperties: false,
@@ -151,7 +164,6 @@ serve(async (req) => {
       ? `\n\nMARKET CONTEXT for ${interview.role}:\nTop skills in demand: ${marketInsights.top_skills?.join(", ")}\nSalary range: ${marketInsights.salary_range?.min} - ${marketInsights.salary_range?.max}\nThis context should inform your personalized tips — compare the candidate's demonstrated skills against market demands.`
       : "";
 
-    // Build personalization context from onboarding
     const personalization = [
       candidateGoal ? `The candidate's primary goal is: "${candidateGoal}".` : "",
       candidateChallenge ? `Their self-identified biggest challenge is: "${candidateChallenge}".` : "",
@@ -190,20 +202,9 @@ serve(async (req) => {
                 struct_score: { type: "integer", description: "Answer structure and organization score 0-100" },
                 clarity_score: { type: "integer", description: "Clarity of expression score 0-100" },
                 impact_score: { type: "integer", description: "Impact and persuasiveness score 0-100" },
-                strengths: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "3-5 specific strengths observed, referencing actual candidate responses",
-                },
-                weaknesses: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "3-5 specific areas for improvement, referencing actual responses",
-                },
-                feedback_text: {
-                  type: "string",
-                  description: "A detailed paragraph of personalized overall feedback (4-6 sentences) addressing the candidate by name",
-                },
+                strengths: { type: "array", items: { type: "string" }, description: "3-5 specific strengths observed, referencing actual candidate responses" },
+                weaknesses: { type: "array", items: { type: "string" }, description: "3-5 specific areas for improvement, referencing actual responses" },
+                feedback_text: { type: "string", description: "A detailed paragraph of personalized overall feedback (4-6 sentences) addressing the candidate by name" },
                 roadmap: {
                   type: "array",
                   items: {
@@ -219,11 +220,7 @@ serve(async (req) => {
                   description: "3-5 actionable learning roadmap items tailored to candidate's gaps",
                 },
               },
-              required: [
-                "overall_score", "comm_score", "tech_score", "conf_score",
-                "struct_score", "clarity_score", "impact_score",
-                "strengths", "weaknesses", "feedback_text", "roadmap",
-              ],
+              required: ["overall_score", "comm_score", "tech_score", "conf_score", "struct_score", "clarity_score", "impact_score", "strengths", "weaknesses", "feedback_text", "roadmap"],
               additionalProperties: false,
             },
           },
@@ -239,12 +236,12 @@ serve(async (req) => {
 
     const reportData = JSON.parse(toolCall.function.arguments);
 
-    // Save report to database
+    // Save report — use callerUserId from JWT, not from request body
     const { data: savedReport, error: saveErr } = await supabase
       .from("reports")
       .insert({
         interview_id: interviewId,
-        user_id: userId,
+        user_id: callerUserId,
         overall_score: reportData.overall_score,
         comm_score: reportData.comm_score,
         tech_score: reportData.tech_score,
@@ -269,23 +266,18 @@ serve(async (req) => {
   } catch (e: any) {
     if (e?.status === 429) {
       return new Response(JSON.stringify({ error: "Rate limit exceeded, please try again later." }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     if (e?.status === 402) {
       return new Response(JSON.stringify({ error: "Usage limit reached. Please add credits." }), {
-        status: 402,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     console.error("Report generation error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

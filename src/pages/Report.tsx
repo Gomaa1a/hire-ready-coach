@@ -162,7 +162,7 @@ const Report = () => {
     setRetrying(true);
     try {
       await supabase.functions.invoke("generate-report", {
-        body: { interviewId: id, userId: user.id },
+        body: { interviewId: id },
       });
       // Now poll for the result
       fetchReport();
