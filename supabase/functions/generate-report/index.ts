@@ -66,6 +66,9 @@ serve(async (req) => {
 
     const interview = interviewResult.data;
     const candidateName = profileResult.data?.full_name || "the candidate";
+    const candidateGoal = profileResult.data?.primary_goal || null;
+    const candidateChallenge = profileResult.data?.biggest_challenge || null;
+    const candidateExpLevel = profileResult.data?.experience_level || null;
 
     const transcriptText = messagesResult.data
       .map((m) => `${m.role === "assistant" ? "Interviewer" : "Candidate"}: ${m.content}`)
