@@ -78,7 +78,7 @@ const LiveInterview = () => {
           setPhase("active");
           startTimeRef.current = Date.now();
           if (id) {
-            startSession(id).catch((err) => {
+            startSession(id, undefined, persona ? { name: persona.name, title: persona.title, company: persona.company } : undefined).catch((err) => {
               console.error("Failed to start session:", err);
               toast.error("Connection failed. Please try again.");
               setPhase("pre-join");
