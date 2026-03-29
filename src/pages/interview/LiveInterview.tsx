@@ -275,15 +275,24 @@ const LiveInterview = () => {
             </div>
           </div>
 
-          {/* Tips */}
-          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-6 py-4 text-left">
-            <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Quick tips</p>
-            <ul className="space-y-1.5 text-sm text-white/50">
-              <li>• Speak clearly and at a natural pace</li>
-              <li>• Take a moment to think before answering</li>
-              <li>• It's okay to ask for clarification</li>
-            </ul>
-          </div>
+          {/* Tips or Coaching Tip */}
+          {coachingTip ? (
+            <div className="rounded-xl bg-blue-500/[0.06] border border-blue-500/20 px-6 py-4 text-left animate-fade-in">
+              <p className="text-xs font-medium text-blue-400/70 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Lightbulb className="h-3.5 w-3.5" /> Coach says
+              </p>
+              <p className="text-sm text-white/70 leading-relaxed">{coachingTip}</p>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-6 py-4 text-left">
+              <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Quick tips</p>
+              <ul className="space-y-1.5 text-sm text-white/50">
+                <li>• Speak clearly and at a natural pace</li>
+                <li>• Take a moment to think before answering</li>
+                <li>• It's okay to ask for clarification</li>
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     );

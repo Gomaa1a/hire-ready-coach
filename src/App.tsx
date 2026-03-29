@@ -36,6 +36,7 @@ const App = () => (
             <Route path="/interview/new" element={<ProtectedRoute children={<NewInterview />} />} />
             <Route path="/interview/:id" element={<ProtectedRoute children={<LiveInterview />} />} />
             <Route path="/report/:id" element={<ProtectedRoute children={<Report />} />} />
+            <Route path="/negotiation/:interviewId" element={<ProtectedRoute children={<NegotiationSim />} />} />
             <Route path="/onboarding" element={<ProtectedRoute children={<Onboarding />} />} />
             <Route path="/pricing" element={<ProtectedRoute children={<Pricing />} />} />
             <Route path="/admin" element={<AdminRoute children={<Admin />} />} />
