@@ -102,11 +102,11 @@ const LiveInterview = () => {
       setPersona(p);
 
       // Generate question bank
-      toast.info("Preparing your interview questions...");
+      toast.info("Preparing your interview...");
       const { error: qbErr } = await supabase.functions.invoke("generate-question-bank", {
         body: { interviewId: id },
       });
-      if (qbErr) throw new Error("Failed to generate questions");
+      if (qbErr) throw new Error("Failed to prepare interview");
 
       // Enter lobby phase
       setLobbyCountdown(5);
