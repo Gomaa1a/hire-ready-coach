@@ -56,7 +56,7 @@ serve(async (req) => {
     // Fetch interview details + candidate name in parallel
     const [interviewResult, profileResult, messagesResult] = await Promise.all([
       supabase.from("interviews").select("role, level").eq("id", interviewId).single(),
-      supabase.from("profiles").select("full_name").eq("id", userId).single(),
+      supabase.from("profiles").select("full_name, target_role, experience_level, primary_goal, biggest_challenge").eq("id", userId).single(),
       supabase.from("messages").select("role, content").eq("interview_id", interviewId).order("created_at", { ascending: true }),
     ]);
 
@@ -66,6 +66,9 @@ serve(async (req) => {
 
     const interview = interviewResult.data;
     const candidateName = profileResult.data?.full_name || "the candidate";
+    const candidateGoal = profileResult.data?.primary_goal || null;
+    const candidateChallenge = profileResult.data?.biggest_challenge || null;
+    const candidateExpLevel = profileResult.data?.experience_level || null;
 
     const transcriptText = messagesResult.data
       .map((m) => `${m.role === "assistant" ? "Interviewer" : "Candidate"}: ${m.content}`)
@@ -148,12 +151,23 @@ serve(async (req) => {
       ? `\n\nMARKET CONTEXT for ${interview.role}:\nTop skills in demand: ${marketInsights.top_skills?.join(", ")}\nSalary range: ${marketInsights.salary_range?.min} - ${marketInsights.salary_range?.max}\nThis context should inform your personalized tips — compare the candidate's demonstrated skills against market demands.`
       : "";
 
+    // Build personalization context from onboarding
+    const personalization = [
+      candidateGoal ? `The candidate's primary goal is: "${candidateGoal}".` : "",
+      candidateChallenge ? `Their self-identified biggest challenge is: "${candidateChallenge}".` : "",
+      candidateExpLevel ? `They identify as ${candidateExpLevel} level.` : "",
+    ].filter(Boolean).join(" ");
+
+    const personalizationSection = personalization
+      ? `\n\nCANDIDATE CONTEXT: ${personalization} Tailor roadmap items and feedback to directly address their stated goal and challenge.`
+      : "";
+
     const reportResult = await callAI(
       LOVABLE_API_KEY,
       [
         {
           role: "system",
-          content: `You are an expert interview coach analyzing a mock interview transcript. The candidate "${candidateName}" interviewed for the role of ${interview.role} at ${interview.level} level. Evaluate their performance thoroughly and provide actionable, personalized feedback.${marketContext}`,
+          content: `You are an expert interview coach analyzing a mock interview transcript. The candidate "${candidateName}" interviewed for the role of ${interview.role} at ${interview.level} level. Evaluate their performance thoroughly and provide actionable, personalized feedback.${marketContext}${personalizationSection}`,
         },
         {
           role: "user",

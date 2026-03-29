@@ -22,6 +22,9 @@ export function useRealtimeInterview() {
   const aiTranscriptRef = useRef("");
   const interviewIdRef = useRef<string>("");
 
+  // Expose stream ref for mute control
+  const getStream = useCallback(() => streamRef.current, []);
+
   const startSession = useCallback(async (interviewId: string) => {
     interviewIdRef.current = interviewId;
     setConnectionStatus("connecting");
@@ -224,5 +227,6 @@ export function useRealtimeInterview() {
     isAISpeaking,
     conversationLog,
     connectionStatus,
+    getStream,
   };
 }

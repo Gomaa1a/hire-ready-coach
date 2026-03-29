@@ -23,6 +23,7 @@ const LiveInterview = () => {
     isAISpeaking,
     conversationLog,
     connectionStatus,
+    getStream,
   } = useRealtimeInterview();
 
   // Load interview data
@@ -114,16 +115,17 @@ const LiveInterview = () => {
   }, [endSession, navigate, id]);
 
   const toggleMute = useCallback(() => {
-    // We need to access the media stream from the peer connection
-    // The hook manages the stream internally, but we can toggle tracks
-    setIsMuted((prev) => {
-      const newMuted = !prev;
-      // Try to mute/unmute via any active audio tracks
-      const senders = (document.querySelector("audio") as any);
+    const stream = getStream();
+    if (stream) {
+      const audioTracks = stream.getAudioTracks();
+      const newMuted = !isMuted;
+      audioTracks.forEach((track) => {
+        track.enabled = !newMuted;
+      });
+      setIsMuted(newMuted);
       toast.info(newMuted ? "Microphone muted" : "Microphone unmuted");
-      return newMuted;
-    });
-  }, []);
+    }
+  }, [getStream, isMuted]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);

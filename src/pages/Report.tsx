@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2, TrendingUp, DollarSign, Building2, Lightbulb } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -85,70 +86,90 @@ const Report = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchReport = async () => {
-      if (!id) {
-        setError("No interview ID provided");
+  const [retrying, setRetrying] = useState(false);
+
+  const fetchReport = useCallback(async () => {
+    if (!id) {
+      setError("No interview ID provided");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    const poll = async () => {
+      const { data, error: fetchErr } = await supabase
+        .from("reports")
+        .select("*, interviews:interview_id(role, level)")
+        .eq("interview_id", id)
+        .maybeSingle();
+
+      if (fetchErr) {
+        setError("Failed to load report");
         setLoading(false);
         return;
       }
 
-      let attempts = 0;
-      const maxAttempts = 30;
+      if (data) {
+        const interviewData = Array.isArray(data.interviews)
+          ? data.interviews[0]
+          : data.interviews;
 
-      const poll = async () => {
-        const { data, error: fetchErr } = await supabase
-          .from("reports")
-          .select("*, interviews:interview_id(role, level)")
-          .eq("interview_id", id)
-          .maybeSingle();
+        setReport({
+          overall_score: data.overall_score ?? 0,
+          comm_score: data.comm_score ?? 0,
+          tech_score: data.tech_score ?? 0,
+          conf_score: data.conf_score ?? 0,
+          struct_score: data.struct_score ?? 0,
+          clarity_score: data.clarity_score ?? 0,
+          impact_score: data.impact_score ?? 0,
+          strengths: (data.strengths as string[]) ?? [],
+          weaknesses: (data.weaknesses as string[]) ?? [],
+          feedback_text: data.feedback_text ?? "",
+          roadmap: (data.roadmap as unknown as RoadmapItem[]) ?? [],
+          market_insights: (data.market_insights as unknown as MarketInsights) ?? null,
+          created_at: data.created_at,
+          interview: interviewData as { role: string; level: string } | null,
+        });
+        setLoading(false);
+        return;
+      }
 
-        if (fetchErr) {
-          setError("Failed to load report");
-          setLoading(false);
-          return;
-        }
+      attempts++;
+      if (attempts >= maxAttempts) {
+        setError("Report is taking longer than expected.");
+        setLoading(false);
+        return;
+      }
 
-        if (data) {
-          const interviewData = Array.isArray(data.interviews)
-            ? data.interviews[0]
-            : data.interviews;
-
-          setReport({
-            overall_score: data.overall_score ?? 0,
-            comm_score: data.comm_score ?? 0,
-            tech_score: data.tech_score ?? 0,
-            conf_score: data.conf_score ?? 0,
-            struct_score: data.struct_score ?? 0,
-            clarity_score: data.clarity_score ?? 0,
-            impact_score: data.impact_score ?? 0,
-            strengths: (data.strengths as string[]) ?? [],
-            weaknesses: (data.weaknesses as string[]) ?? [],
-            feedback_text: data.feedback_text ?? "",
-            roadmap: (data.roadmap as unknown as RoadmapItem[]) ?? [],
-            market_insights: (data.market_insights as unknown as MarketInsights) ?? null,
-            created_at: data.created_at,
-            interview: interviewData as { role: string; level: string } | null,
-          });
-          setLoading(false);
-          return;
-        }
-
-        attempts++;
-        if (attempts >= maxAttempts) {
-          setError("Report is taking longer than expected. Please refresh the page.");
-          setLoading(false);
-          return;
-        }
-
-        setTimeout(poll, 2000);
-      };
-
-      poll();
+      setTimeout(poll, 2000);
     };
 
-    fetchReport();
+    poll();
   }, [id]);
+
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
+
+  const handleRetry = async () => {
+    if (!id || !user) return;
+    setRetrying(true);
+    try {
+      await supabase.functions.invoke("generate-report", {
+        body: { interviewId: id, userId: user.id },
+      });
+      // Now poll for the result
+      fetchReport();
+    } catch (e) {
+      toast.error("Failed to regenerate report. Please try again.");
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -164,9 +185,18 @@ const Report = () => {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
         <p className="text-lg font-bold text-destructive">{error || "Report not found"}</p>
-        <Link to="/dashboard" className="neo-btn bg-primary text-primary-foreground">
-          Back to Dashboard
-        </Link>
+        <div className="flex gap-3">
+          <button
+            onClick={handleRetry}
+            disabled={retrying}
+            className="neo-btn bg-primary text-primary-foreground disabled:opacity-50"
+          >
+            {retrying ? "Regenerating..." : "Retry Report Generation"}
+          </button>
+          <Link to="/dashboard" className="neo-btn bg-muted text-muted-foreground">
+            Back to Dashboard
+          </Link>
+        </div>
       </div>
     );
   }
