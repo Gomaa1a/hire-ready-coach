@@ -1,12 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { extractText } from "npm:unpdf@0.12.1";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const bodySchema = z.object({
+  interviewId: z.string().uuid(),
+  userMessage: z.string().optional(),
+});
 
 const PHASE_ORDER = ["opening", "technical", "behavioral", "situational", "closing"];
 const PHASE_QUESTIONS: Record<string, { min: number; max: number }> = {
@@ -41,10 +47,9 @@ function buildSystemPrompt(
     : "";
 
   const cvSection = cvSummary
-    ? `\n\nCANDIDATE CV SUMMARY:\n${cvSummary}\n\nUse this CV to ask personalized questions about their specific experience, projects, and skills mentioned. Reference specific items from their CV naturally (e.g., "I see you worked on X at Y company — tell me more about that"). Make transitions personal by connecting their past experience to the next topic.`
+    ? `\n\nCANDIDATE CV SUMMARY:\n${cvSummary}\n\nUse this CV to ask personalized questions about their specific experience, projects, and skills mentioned. Reference specific items from their CV naturally.`
     : "\nNo CV provided. Ask general questions appropriate for the role and level.";
 
-  // Determine if this role might involve Arabic language skills
   const arabicKeywords = [
     "arabic", "عربي", "middle east", "mena", "gcc", "saudi", "uae", "dubai", "qatar", "kuwait", "bahrain", "oman",
     "jordan", "egypt", "lebanon", "morocco", "customer service", "support", "sales", "marketing", "content",
@@ -55,22 +60,17 @@ function buildSystemPrompt(
   const mightInvolveArabic = arabicKeywords.some(kw => roleLower.includes(kw) || cvLower.includes(kw));
 
   const arabicSection = mightInvolveArabic
-    ? `\n\nARABIC LANGUAGE TESTING:
-This role may involve Arabic language skills. During the interview (especially in Technical or Behavioral phases), occasionally ask 1-2 questions where you request the candidate to answer in Arabic. Frame it naturally, e.g.:
-- "For this next question, I'd like you to answer in Arabic so I can assess your fluency. [Ask the question in English]"
-- "Since this role involves Arabic communication, could you describe [topic] in Arabic?"
-YOU (the interviewer) should always speak/ask in English, but request the candidate to respond in Arabic for those specific questions. Do this 1-2 times during the interview, not every question.`
+    ? `\n\nARABIC LANGUAGE TESTING:\nThis role may involve Arabic language skills. During the interview, occasionally ask 1-2 questions where you request the candidate to answer in Arabic. Frame it naturally. YOU should always speak in English, but request Arabic responses for those specific questions.`
     : "";
 
-  // Determine interview tone based on role context
   let toneGuidance = "";
   const roleL = role.toLowerCase();
   if (roleL.includes("startup") || roleL.includes("creative") || roleL.includes("design")) {
-    toneGuidance = `\nTONE: Keep the conversation casual and energetic. Use phrases like "That's really cool" or "I love that approach." Think startup culture — collaborative and curious.`;
+    toneGuidance = `\nTONE: Keep the conversation casual and energetic. Think startup culture.`;
   } else if (roleL.includes("finance") || roleL.includes("banking") || roleL.includes("legal") || roleL.includes("consulting")) {
-    toneGuidance = `\nTONE: Maintain a professional, structured tone. Be polite but rigorous. Think top-tier consulting or banking interviews — precise and methodical.`;
+    toneGuidance = `\nTONE: Maintain a professional, structured tone. Think top-tier consulting interviews.`;
   } else {
-    toneGuidance = `\nTONE: Be professional yet warm. Use natural acknowledgments like "That's a great point" or "Interesting approach" between questions. Make it feel like a real human conversation.`;
+    toneGuidance = `\nTONE: Be professional yet warm. Make it feel like a real human conversation.`;
   }
 
   return `You are a professional, experienced interviewer conducting a mock interview for a ${level} ${role} position.
@@ -78,8 +78,8 @@ ${greeting}
 ${toneGuidance}
 
 PERSONALITY GUIDELINES:
-- React naturally to answers: acknowledge good points ("That's insightful"), probe weak ones ("Could you elaborate on that?")
-- Use brief transition phrases between topics, not robotic jumps
+- React naturally to answers: acknowledge good points, probe weak ones
+- Use brief transition phrases between topics
 - Refer to ${nameRef}'s specific experiences when moving between subjects
 - Vary your energy: be warmer in opening/closing, more focused in technical/behavioral
 
@@ -94,28 +94,27 @@ ${arabicSection}
 INTERVIEW METHODOLOGY:
 
 PHASE DESCRIPTIONS:
-1. OPENING (1-2 questions): Warm-up questions. "Tell me about yourself", motivation for this role, career goals. Be warm and encouraging.
-2. TECHNICAL (4-6 questions): Role-specific technical/domain questions. For engineers: system design, coding concepts, architecture. For PMs: product sense, metrics, prioritization. For designers: design process, user research. Calibrate difficulty to ${level} level. If previous answer scored below 50, ask a simpler follow-up. If above 80, escalate difficulty.
-3. BEHAVIORAL (2-3 questions): Use the STAR method framework. Ask about leadership, conflict resolution, teamwork, failure handling. Probe for specific examples with follow-ups like "What was the outcome?" or "What would you do differently?"
-4. SITUATIONAL (1-2 questions): Present hypothetical scenarios relevant to the ${role} role at ${level} level. Test problem-solving and decision-making under ambiguity.
-5. CLOSING (1 question): Wrap up warmly. Ask if the candidate has questions, provide brief encouragement.
+1. OPENING (1-2 questions): Warm-up questions. Be warm and encouraging.
+2. TECHNICAL (4-6 questions): Role-specific technical/domain questions. Calibrate difficulty to ${level} level.
+3. BEHAVIORAL (2-3 questions): Use the STAR method framework. Probe for specific examples.
+4. SITUATIONAL (1-2 questions): Present hypothetical scenarios relevant to the ${role} role.
+5. CLOSING (1 question): Wrap up warmly.
 
 ADAPTIVE RULES:
-- If a candidate's answer is vague or weak (you'd score it below 50), ask a probing follow-up on the SAME topic before moving on.
-- If an answer is strong (above 80), acknowledge it briefly and move to a harder topic.
+- If a candidate's answer is weak (below 50), ask a probing follow-up before moving on.
+- If strong (above 80), acknowledge briefly and move to a harder topic.
 - Never repeat a topic already covered.
-- Keep questions concise and natural — like a real interviewer, not a quiz.
-- Transition between phases naturally with brief connecting statements.
+- Keep questions concise and natural.
 
 SCORING RUBRIC (score each answer 0-100):
-- comm: Communication clarity, articulation, conciseness
-- tech: Technical accuracy and depth (for non-technical phases, score based on domain knowledge)
-- conf: Confidence, composure, professionalism
-- struct: Answer structure (STAR method usage, logical flow)
-- clarity: Clarity of thought and expression
-- impact: Persuasiveness, concrete examples, measurable results
+- comm: Communication clarity
+- tech: Technical accuracy and depth
+- conf: Confidence and composure
+- struct: Answer structure
+- clarity: Clarity of thought
+- impact: Persuasiveness and concrete examples
 
-IMPORTANT: You are having a voice conversation. Keep your questions natural, conversational, and concise (2-3 sentences max). Do NOT use bullet points, markdown, or lists in your spoken question.`;
+IMPORTANT: You are having a voice conversation. Keep your questions natural and concise (2-3 sentences max).`;
 }
 
 serve(async (req) => {
@@ -128,11 +127,30 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { interviewId, userMessage } = await req.json();
-    if (!interviewId) throw new Error("interviewId is required");
+    // Auth check
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } });
+    const tokenStr = authHeader.replace("Bearer ", "");
+    const { data: claims, error: claimsErr } = await supabaseAuth.auth.getClaims(tokenStr);
+    if (claimsErr || !claims?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const callerUserId = claims.claims.sub as string;
+
+    // Input validation
+    const parsed = bodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const { interviewId, userMessage } = parsed.data;
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // 1. Load interview config
     const { data: interview, error: intErr } = await supabase
@@ -142,7 +160,12 @@ serve(async (req) => {
       .single();
     if (intErr || !interview) throw new Error("Interview not found");
 
-    // 2. Load candidate name from profiles (parallel with state load)
+    // Ownership check
+    if (interview.user_id !== callerUserId) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // 2. Load candidate name + state in parallel
     const [profileResult, stateResult] = await Promise.all([
       supabase.from("profiles").select("full_name").eq("id", interview.user_id).single(),
       supabase.from("interview_state").select("*").eq("interview_id", interviewId).single(),
@@ -152,20 +175,15 @@ serve(async (req) => {
     let state = stateResult.data;
 
     if (!state) {
-      // First call — create state and parse CV if available
       let cvSummary: string | null = null;
       if (interview.cv_url) {
         try {
-          const { data: fileData } = await supabase.storage
-            .from("cvs")
-            .download(interview.cv_url);
+          const { data: fileData } = await supabase.storage.from("cvs").download(interview.cv_url);
           if (fileData) {
             const buffer = await fileData.arrayBuffer();
             const { text } = await extractText(new Uint8Array(buffer), { mergePages: true });
             cvSummary = text || null;
-            if (cvSummary && cvSummary.length > 4000) {
-              cvSummary = cvSummary.substring(0, 4000) + "\n...[truncated]";
-            }
+            if (cvSummary && cvSummary.length > 4000) cvSummary = cvSummary.substring(0, 4000) + "\n...[truncated]";
           }
         } catch (e) {
           console.error("CV parse failed:", e);
@@ -174,28 +192,16 @@ serve(async (req) => {
 
       const { data: newState, error: createErr } = await supabase
         .from("interview_state")
-        .insert({
-          interview_id: interviewId,
-          current_phase: "opening",
-          question_count: 0,
-          running_scores: {},
-          topics_covered: [],
-          cv_summary: cvSummary,
-        })
+        .insert({ interview_id: interviewId, current_phase: "opening", question_count: 0, running_scores: {}, topics_covered: [], cv_summary: cvSummary })
         .select()
         .single();
-
       if (createErr) throw new Error(`Failed to create state: ${createErr.message}`);
       state = newState;
     }
 
     // 3. Save user message if provided
     if (userMessage && userMessage.trim()) {
-      await supabase.from("messages").insert({
-        interview_id: interviewId,
-        role: "user",
-        content: userMessage.trim(),
-      });
+      await supabase.from("messages").insert({ interview_id: interviewId, role: "user", content: userMessage.trim() });
     }
 
     // 4. Load conversation history
@@ -212,99 +218,55 @@ serve(async (req) => {
 
     // 5. Build system prompt
     const systemPrompt = buildSystemPrompt(
-      interview.role,
-      interview.level,
-      state.current_phase,
-      state.question_count,
-      state.running_scores as Record<string, number>,
-      state.topics_covered as string[],
-      state.cv_summary,
-      candidateName
+      interview.role, interview.level, state.current_phase, state.question_count,
+      state.running_scores as Record<string, number>, state.topics_covered as string[],
+      state.cv_summary, candidateName
     );
 
-    // 6. Call Lovable AI with tool calling
-    const aiMessages = [
-      { role: "system", content: systemPrompt },
-      ...conversationHistory,
-    ];
-
-    // If no user message (first call), add instruction to start
+    // 6. Call Lovable AI
+    const aiMessages = [{ role: "system", content: systemPrompt }, ...conversationHistory];
     if (!userMessage || !userMessage.trim()) {
-      aiMessages.push({
-        role: "user",
-        content: `The interview is starting now. Please greet ${candidateName ? candidateName.split(" ")[0] : "the candidate"} warmly and ask your first opening question.`,
-      });
+      aiMessages.push({ role: "user", content: `The interview is starting now. Please greet ${candidateName ? candidateName.split(" ")[0] : "the candidate"} warmly and ask your first opening question.` });
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: aiMessages,
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "interview_turn",
-              description: "Return the next interviewer question along with scoring and phase tracking data.",
-              parameters: {
-                type: "object",
-                properties: {
-                  next_question: {
-                    type: "string",
-                    description: "The interviewer's next spoken response/question. Keep it natural and conversational.",
-                  },
-                  phase: {
-                    type: "string",
-                    enum: PHASE_ORDER,
-                    description: "The current or next interview phase.",
-                  },
-                  scores: {
-                    type: "object",
-                    properties: {
-                      comm: { type: "integer", description: "Communication score 0-100" },
-                      tech: { type: "integer", description: "Technical score 0-100" },
-                      conf: { type: "integer", description: "Confidence score 0-100" },
-                      struct: { type: "integer", description: "Structure score 0-100" },
-                      clarity: { type: "integer", description: "Clarity score 0-100" },
-                      impact: { type: "integer", description: "Impact score 0-100" },
-                    },
-                    description: "Scores for the candidate's last answer. Empty object if this is the first question.",
-                  },
-                  follow_up: {
-                    type: "boolean",
-                    description: "Whether this question is a follow-up probe on the same topic.",
-                  },
-                  topic: {
-                    type: "string",
-                    description: "The topic/subject of this question (e.g., 'system design', 'leadership', 'career goals').",
+        tools: [{
+          type: "function",
+          function: {
+            name: "interview_turn",
+            description: "Return the next interviewer question along with scoring and phase tracking data.",
+            parameters: {
+              type: "object",
+              properties: {
+                next_question: { type: "string" },
+                phase: { type: "string", enum: PHASE_ORDER },
+                scores: {
+                  type: "object",
+                  properties: {
+                    comm: { type: "integer" }, tech: { type: "integer" }, conf: { type: "integer" },
+                    struct: { type: "integer" }, clarity: { type: "integer" }, impact: { type: "integer" },
                   },
                 },
-                required: ["next_question", "phase", "scores", "follow_up", "topic"],
-                additionalProperties: false,
+                follow_up: { type: "boolean" },
+                topic: { type: "string" },
               },
+              required: ["next_question", "phase", "scores", "follow_up", "topic"],
+              additionalProperties: false,
             },
           },
-        ],
+        }],
         tool_choice: { type: "function", function: { name: "interview_turn" } },
       }),
     });
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Usage limit reached" }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (response.status === 402) return new Response(JSON.stringify({ error: "Usage limit reached" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       const errText = await response.text();
       console.error("AI error:", response.status, errText);
       throw new Error(`AI error: ${response.status}`);
@@ -312,18 +274,12 @@ serve(async (req) => {
 
     const aiResult = await response.json();
     const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall?.function?.arguments) {
-      throw new Error("AI did not return structured output");
-    }
+    if (!toolCall?.function?.arguments) throw new Error("AI did not return structured output");
 
     const turnData = JSON.parse(toolCall.function.arguments);
 
-    // 7. Save AI question to messages
-    await supabase.from("messages").insert({
-      interview_id: interviewId,
-      role: "assistant",
-      content: turnData.next_question,
-    });
+    // 7. Save AI question
+    await supabase.from("messages").insert({ interview_id: interviewId, role: "assistant", content: turnData.next_question });
 
     // 8. Update interview state
     const currentScores = (state.running_scores || {}) as Record<string, number[]>;
@@ -340,40 +296,24 @@ serve(async (req) => {
       ? [...currentTopics, turnData.topic]
       : currentTopics;
 
-    // Determine phase transition
     let nextPhase = turnData.phase;
     const phaseConfig = PHASE_QUESTIONS[state.current_phase];
     const questionsInPhase = state.question_count - (
       PHASE_ORDER.slice(0, PHASE_ORDER.indexOf(state.current_phase))
         .reduce((sum, p) => sum + PHASE_QUESTIONS[p].max, 0)
     );
-
     if (questionsInPhase >= phaseConfig.max) {
       const currentIndex = PHASE_ORDER.indexOf(state.current_phase);
-      if (currentIndex < PHASE_ORDER.length - 1) {
-        nextPhase = PHASE_ORDER[currentIndex + 1];
-      }
+      if (currentIndex < PHASE_ORDER.length - 1) nextPhase = PHASE_ORDER[currentIndex + 1];
     }
 
-    await supabase
-      .from("interview_state")
-      .update({
-        current_phase: nextPhase,
-        question_count: state.question_count + 1,
-        running_scores: newScores,
-        topics_covered: newTopics,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("interview_id", interviewId);
+    await supabase.from("interview_state").update({
+      current_phase: nextPhase, question_count: state.question_count + 1,
+      running_scores: newScores, topics_covered: newTopics, updated_at: new Date().toISOString(),
+    }).eq("interview_id", interviewId);
 
     return new Response(
-      JSON.stringify({
-        next_question: turnData.next_question,
-        phase: nextPhase,
-        question_count: state.question_count + 1,
-        follow_up: turnData.follow_up,
-        topic: turnData.topic,
-      }),
+      JSON.stringify({ next_question: turnData.next_question, phase: nextPhase, question_count: state.question_count + 1, follow_up: turnData.follow_up, topic: turnData.topic }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
