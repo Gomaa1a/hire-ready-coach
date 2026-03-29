@@ -145,7 +145,7 @@ const LiveInterview = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           supabase.functions
-            .invoke("generate-report", { body: { interviewId: id, userId: user.id } })
+            .invoke("generate-report", { body: { interviewId: id } })
             .then(({ error }) => {
               if (error) console.error("Report generation failed:", error);
             });
