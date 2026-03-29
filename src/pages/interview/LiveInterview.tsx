@@ -18,6 +18,7 @@ const LiveInterview = () => {
   const [persona, setPersona] = useState<InterviewerPersona | null>(null);
   const [lobbyCountdown, setLobbyCountdown] = useState(5);
   const [preparing, setPreparing] = useState(false);
+  const [coachingTip, setCoachingTip] = useState<string | null>(null);
   const endingRef = useRef(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
