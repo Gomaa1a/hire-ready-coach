@@ -1,46 +1,89 @@
 
 
-## Plan: Real-Feel Interview Experience Enhancements
+## Plan: Add Unique AI Agents to the Platform
 
 ### What We're Building
 
-Four enhancements to make the interview feel like a real human conversation instead of an AI tool:
+Three new AI-powered agents that extend the candidate journey beyond the core interview, making HireReady a full career preparation platform:
 
-1. **Waiting Room Lobby** — A 5-second countdown screen after clicking "Join" that builds anticipation (like joining a real Zoom interview)
-2. **Interviewer Persona** — Generate a random interviewer name, title, and company so the candidate feels they're meeting a real person (e.g., "Sarah Chen, Engineering Manager at TechCorp")
-3. **Cinematic Debrief Transition** — After ending the interview, show a 4-second "Interview Complete" screen with stats (duration, questions answered) before navigating to the report
-4. **UI Polish** — Show the interviewer persona name/title on the active interview screen, replace generic "AI Interviewer" label
+1. **Pre-Interview Coach Agent** — A voice agent on the lobby/waiting room screen that gives the candidate a 60-second personalized coaching tip before the interview starts (e.g., "For this Senior Software Engineer role, make sure to emphasize system design experience...")
+2. **Report Narrator Agent** — After the report is generated, a "Listen to your debrief" button plays an AI voice walkthrough of the report results, like a personal career coach explaining the scores
+3. **Salary Negotiation Simulator** — A separate page/modal accessible from the report where the candidate practices negotiating a job offer with an AI HR manager voice agent
 
 ### Technical Details
 
-**File: `src/pages/interview/LiveInterview.tsx`**
+#### Agent 1: Pre-Interview Coach (Edge Function + Frontend)
 
-Major restructure of the component flow into 4 phases:
+**New edge function: `supabase/functions/pre-interview-coach/index.ts`**
+- Receives `{ interviewId }`, fetches the role, level, and candidate profile (target_role, experience_level, biggest_challenge)
+- Calls Lovable AI (Gemini Flash) to generate a short (3-4 sentence) personalized coaching tip
+- Returns `{ coachingTip: string }`
 
-```text
-Phase 1: PRE-JOIN (current) — "Ready when you are" + Join button
-Phase 2: WAITING ROOM (new) — 5s countdown with interviewer persona card
-Phase 3: ACTIVE INTERVIEW (current, enhanced) — Show persona name instead of "AI Interviewer"
-Phase 4: DEBRIEF (new) — "Interview Complete" cinematic screen (4s) before navigating to report
-```
+**Frontend: `src/pages/interview/LiveInterview.tsx`**
+- During the lobby phase, after generating question bank, call `pre-interview-coach` edge function
+- Display the coaching tip as an animated text reveal below the interviewer persona card
+- Add a subtle "Coach says:" label with a lightbulb icon
+- The tip appears during the 5-second countdown, giving the candidate something valuable to read while waiting
 
-- Add state: `phase: "pre-join" | "lobby" | "active" | "debrief"`
-- Add state: `interviewerPersona: { name, title, company }`
-- On "Join" click: generate question bank (existing), then enter lobby phase
-- Lobby phase: show interviewer avatar with name/title/company, 5-second countdown, auto-transition to active phase where `startSession()` is called
-- On "End Interview": enter debrief phase showing duration, question count from conversationLog, a checkmark animation, then after 4s navigate to report
-- Generate persona randomly from a curated list of ~20 names, ~10 titles, ~10 companies (all hardcoded arrays, no API call needed)
+#### Agent 2: Report Narrator (Edge Function + Frontend)
 
-**File: `src/components/interview/InterviewerPersona.ts`** (new)
+**New edge function: `supabase/functions/narrate-report/index.ts`**
+- Receives `{ interviewId }`, fetches the report data from the `reports` table
+- Builds a natural script: "Hey [name], let me walk you through your results. You scored [X]% overall — here's what stood out..."
+- Calls ElevenLabs TTS API (already have ELEVENLABS_API_KEY) to generate audio
+- Returns the audio as a base64 string or streams it
 
-A simple utility that exports a `generatePersona()` function returning `{ name, title, company, initials }` from curated arrays. Names are diverse and professional. Titles match the interview role context (e.g., for "Software Engineer" → "Engineering Manager", for "Product Manager" → "VP of Product").
+**Frontend: `src/pages/Report.tsx`**
+- Add a "Listen to Your Debrief" button at the top of the report (below header)
+- On click, fetch audio from the edge function, play it using an `<audio>` element
+- Show a mini player bar with play/pause, progress, and a pulsing avatar while playing
+- The narration covers: overall score, top strength, biggest area to improve, and one roadmap item
+
+#### Agent 3: Salary Negotiation Simulator (Edge Function + Page)
+
+**New edge function: `supabase/functions/negotiation-session-token/index.ts`**
+- Similar to `realtime-session-token` but with a different system prompt
+- The AI plays an HR manager making a job offer for the candidate's role
+- Instructions: present an offer (salary from market_insights), let candidate negotiate, respond realistically, after 3-4 exchanges wrap up and give feedback on negotiation skills
+- Uses OpenAI Realtime API (same WebRTC approach as the interview)
+
+**New page: `src/pages/interview/NegotiationSim.tsx`**
+- Accessible from the Report page via a "Practice Negotiation" button
+- Reuses the same dark video-call UI from LiveInterview (interviewer avatar, captions, controls)
+- Different persona: "HR Manager" type (uses `generatePersona` with HR-related titles)
+- Shorter session: 5-minute timer instead of 15
+- After ending, shows a brief scorecard (assertiveness, professionalism, outcome) — generated via Lovable AI edge function call
+
+**New edge function: `supabase/functions/score-negotiation/index.ts`**
+- Takes the negotiation transcript, scores on: assertiveness (0-100), professionalism (0-100), negotiation outcome (accepted/countered/rejected), and 2-3 tips
+- Returns structured JSON, displayed on a simple results card
+
+**Database migration:**
+- Add `negotiation_sessions` table: `id`, `interview_id`, `user_id`, `created_at`, `ended_at`, `assertiveness_score`, `professionalism_score`, `outcome`, `tips` (jsonb)
+
+**Route:** Add `/negotiation/:interviewId` to App.tsx
+
+**InterviewerPersona.ts update:**
+- Add HR-specific title category: "HR Director", "VP of People", "Compensation Manager", "Head of Talent"
 
 ### Changes Summary
 
 | File | Change |
 |------|--------|
-| `src/components/interview/InterviewerPersona.ts` | New — persona generator utility |
-| `src/pages/interview/LiveInterview.tsx` | Major — add lobby phase, debrief phase, persona display, 4-phase flow |
+| `supabase/functions/pre-interview-coach/index.ts` | New — generates personalized coaching tip |
+| `supabase/functions/narrate-report/index.ts` | New — generates TTS audio walkthrough of report |
+| `supabase/functions/negotiation-session-token/index.ts` | New — OpenAI Realtime session for salary negotiation |
+| `supabase/functions/score-negotiation/index.ts` | New — scores negotiation transcript |
+| `src/pages/interview/LiveInterview.tsx` | Add coaching tip display in lobby phase |
+| `src/pages/Report.tsx` | Add "Listen to Debrief" button + audio player, "Practice Negotiation" button |
+| `src/pages/interview/NegotiationSim.tsx` | New — salary negotiation voice simulator page |
+| `src/components/interview/InterviewerPersona.ts` | Add HR title category |
+| `src/App.tsx` | Add `/negotiation/:interviewId` route |
+| Database migration | New `negotiation_sessions` table |
 
-No database changes. No edge function changes. Pure frontend enhancement.
+### What Makes This Unique
+
+- **Pre-Interview Coach**: No other platform gives you a personalized pep talk before the interview starts — it reduces anxiety and primes the candidate
+- **Report Narrator**: Hearing your results explained by a voice coach is far more engaging than reading a wall of text — "Spotify Wrapped" for interviews
+- **Salary Negotiation**: This is the feature no competitor has — candidates practice the hardest conversation (money talk) in a safe environment with AI feedback
 
