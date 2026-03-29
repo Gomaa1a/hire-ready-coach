@@ -78,7 +78,7 @@ serve(async (req) => {
     }
 
     const cvSection = cvContext
-      ? `\n\nThe candidate's CV/resume:\n${cvContext}\n\nUse this to personalize questions about their specific experience, projects, and skills.`
+      ? `\n\nThe candidate's CV/resume content:\n${cvContext}\n\nExtract key highlights: notable projects, specific technologies, leadership experience, career progression, and anything unique about this candidate.`
       : "";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -92,47 +92,69 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are an expert technical interviewer. Generate a structured interview question bank for a ${interview.level} ${interview.role} position.${cvSection}`,
+            content: `You are an expert interviewer preparing a topic guide for a live conversational interview. This is NOT a list of questions to read — it's a briefing document that tells a smart AI interviewer what competency areas to explore, what signals to look for, and what makes this candidate unique.
+
+The interview is for a ${interview.level} ${interview.role} position.${cvSection}`,
           },
           {
             role: "user",
-            content: `Generate 6-8 interview questions appropriate for a ${interview.level} ${interview.role}. Include a mix of technical, behavioral, and situational questions. Make them specific and challenging for the level.`,
+            content: `Create a competency-based topic guide for interviewing a ${interview.level} ${interview.role}. 
+
+The guide should:
+1. Identify 5-6 competency areas relevant to this specific role and level
+2. For each area, describe what good looks like and what red flags to watch for
+3. Extract specific highlights from the CV that the interviewer can reference naturally in conversation
+4. Suggest a personalized icebreaker based on something interesting from their background
+5. Include evaluation signals — not scripted questions
+
+The interviewer will use this guide to have a natural, adaptive conversation — NOT to read questions from a list.`,
           },
         ],
         tools: [
           {
             type: "function",
             function: {
-              name: "question_bank",
-              description: "Return a structured interview question bank.",
+              name: "topic_guide",
+              description: "Return a structured topic guide for a conversational interview.",
               parameters: {
                 type: "object",
                 properties: {
-                  opening: { type: "string", description: "A warm, professional opening statement the AI interviewer will say at the start." },
-                  questions: {
+                  competencies: {
                     type: "array",
                     items: {
                       type: "object",
                       properties: {
-                        id: { type: "string" },
-                        question: { type: "string" },
-                        followUps: { type: "array", items: { type: "string" } },
-                        goodAnswerSignals: { type: "array", items: { type: "string" } },
-                        redFlags: { type: "array", items: { type: "string" } },
+                        area: { type: "string", description: "Competency area name, e.g. 'System Design', 'Team Leadership'" },
+                        why: { type: "string", description: "Why this area matters for this specific role and level" },
+                        signals_to_look_for: { type: "array", items: { type: "string" }, description: "What good answers sound like — specific behaviors, patterns, depth indicators" },
+                        red_flags: { type: "array", items: { type: "string" }, description: "Warning signs in responses" },
+                        depth_level: { type: "string", enum: ["surface", "moderate", "deep"], description: "How deeply to probe this area given the candidate's level" },
                       },
-                      required: ["id", "question", "followUps", "goodAnswerSignals", "redFlags"],
+                      required: ["area", "why", "signals_to_look_for", "red_flags", "depth_level"],
                       additionalProperties: false,
                     },
                   },
-                  closing: { type: "string", description: "A warm closing statement." },
+                  candidate_highlights: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Key things from the CV the interviewer can reference naturally, e.g. 'Led the migration from monolith to microservices at Acme Corp'",
+                  },
+                  suggested_icebreaker: {
+                    type: "string",
+                    description: "A natural, personalized opening based on something interesting from their background. NOT a generic greeting.",
+                  },
+                  level_expectations: {
+                    type: "string",
+                    description: "What depth and maturity of answers to expect given the candidate's seniority level. Helps calibrate difficulty.",
+                  },
                 },
-                required: ["opening", "questions", "closing"],
+                required: ["competencies", "candidate_highlights", "suggested_icebreaker", "level_expectations"],
                 additionalProperties: false,
               },
             },
           },
         ],
-        tool_choice: { type: "function", function: { name: "question_bank" } },
+        tool_choice: { type: "function", function: { name: "topic_guide" } },
       }),
     });
 
@@ -152,21 +174,21 @@ serve(async (req) => {
     const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall?.function?.arguments) throw new Error("AI did not return structured output");
 
-    const questionBank = JSON.parse(toolCall.function.arguments);
+    const topicGuide = JSON.parse(toolCall.function.arguments);
 
-    // Save question bank to interview
+    // Save topic guide to interview (stored in question_bank column)
     const { error: updateErr } = await supabase
       .from("interviews")
-      .update({ question_bank: questionBank })
+      .update({ question_bank: topicGuide })
       .eq("id", interviewId);
 
-    if (updateErr) throw new Error(`Failed to save question bank: ${updateErr.message}`);
+    if (updateErr) throw new Error(`Failed to save topic guide: ${updateErr.message}`);
 
-    return new Response(JSON.stringify({ success: true, questionBank }), {
+    return new Response(JSON.stringify({ success: true, topicGuide }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
-    console.error("Question bank error:", e);
+    console.error("Topic guide error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

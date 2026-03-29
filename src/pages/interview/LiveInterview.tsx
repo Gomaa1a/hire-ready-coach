@@ -321,8 +321,8 @@ const LiveInterview = () => {
             </div>
             <div className="h-8 w-px bg-white/10" />
             <div className="text-center">
-              <p className="text-2xl font-bold text-white tabular-nums">{questionsAnswered}</p>
-              <p className="text-xs text-white/40 mt-1">Questions Answered</p>
+              <p className="text-2xl font-bold text-white tabular-nums">{topicsDiscussed}</p>
+              <p className="text-xs text-white/40 mt-1">Responses</p>
             </div>
           </div>
 
