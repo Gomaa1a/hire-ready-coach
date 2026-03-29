@@ -185,9 +185,18 @@ const Report = () => {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
         <p className="text-lg font-bold text-destructive">{error || "Report not found"}</p>
-        <Link to="/dashboard" className="neo-btn bg-primary text-primary-foreground">
-          Back to Dashboard
-        </Link>
+        <div className="flex gap-3">
+          <button
+            onClick={handleRetry}
+            disabled={retrying}
+            className="neo-btn bg-primary text-primary-foreground disabled:opacity-50"
+          >
+            {retrying ? "Regenerating..." : "Retry Report Generation"}
+          </button>
+          <Link to="/dashboard" className="neo-btn bg-muted text-muted-foreground">
+            Back to Dashboard
+          </Link>
+        </div>
       </div>
     );
   }
