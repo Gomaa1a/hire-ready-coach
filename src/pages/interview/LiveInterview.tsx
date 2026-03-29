@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, User, CheckCircle2 } from "lucide-react";
+import { Mic, MicOff, PhoneOff, User, CheckCircle2, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInterview } from "@/hooks/useRealtimeInterview";
