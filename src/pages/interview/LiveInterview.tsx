@@ -188,7 +188,7 @@ const LiveInterview = () => {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const questionsAnswered = conversationLog.filter((e) => e.role === "user").length;
+  const topicsDiscussed = conversationLog.filter((e) => e.role === "user").length;
 
   const pct = timeLeft / 900;
   const timerColor = pct > 0.4 ? "text-green-400" : pct > 0.15 ? "text-amber-400" : "text-red-400";
