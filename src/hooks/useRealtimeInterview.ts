@@ -25,22 +25,26 @@ export function useRealtimeInterview() {
   // Expose stream ref for mute control
   const getStream = useCallback(() => streamRef.current, []);
 
-  const startSession = useCallback(async (interviewId: string) => {
+  const startSession = useCallback(async (interviewId: string, preGeneratedToken?: string) => {
     interviewIdRef.current = interviewId;
     setConnectionStatus("connecting");
 
     try {
-      // 1. Get ephemeral token
-      const { data: tokenData, error: tokenErr } = await supabase.functions.invoke(
-        "realtime-session-token",
-        { body: { interviewId } }
-      );
+      let ephemeralToken = preGeneratedToken;
 
-      if (tokenErr || !tokenData?.ephemeralToken) {
-        throw new Error(tokenErr?.message || "Failed to get session token");
+      // 1. Get ephemeral token (skip if pre-generated token provided)
+      if (!ephemeralToken) {
+        const { data: tokenData, error: tokenErr } = await supabase.functions.invoke(
+          "realtime-session-token",
+          { body: { interviewId } }
+        );
+
+        if (tokenErr || !tokenData?.ephemeralToken) {
+          throw new Error(tokenErr?.message || "Failed to get session token");
+        }
+
+        ephemeralToken = tokenData.ephemeralToken;
       }
-
-      const ephemeralToken = tokenData.ephemeralToken;
 
       // 2. Create peer connection
       const pc = new RTCPeerConnection();

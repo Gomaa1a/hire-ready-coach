@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2, TrendingUp, DollarSign, Building2, Lightbulb } from "lucide-react";
+import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2, TrendingUp, DollarSign, Building2, Lightbulb, Headphones, Pause, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import ShareAchievement from "@/components/report/ShareAchievement";
@@ -85,8 +85,10 @@ const Report = () => {
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [retrying, setRetrying] = useState(false);
+  const [narrationLoading, setNarrationLoading] = useState(false);
+  const [narrationPlaying, setNarrationPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const fetchReport = useCallback(async () => {
     if (!id) {
@@ -245,7 +247,54 @@ const Report = () => {
           </div>
         </div>
 
-        {/* Score hero */}
+        {/* Listen to Debrief + Practice Negotiation */}
+        <div className="mb-8 flex flex-wrap gap-3">
+          <button
+            onClick={async () => {
+              if (narrationPlaying && audioRef.current) {
+                audioRef.current.pause();
+                setNarrationPlaying(false);
+                return;
+              }
+              if (audioRef.current?.src) {
+                audioRef.current.play();
+                setNarrationPlaying(true);
+                return;
+              }
+              setNarrationLoading(true);
+              try {
+                const { data, error } = await supabase.functions.invoke("narrate-report", {
+                  body: { interviewId: id },
+                });
+                if (error || !data?.audio) throw new Error("Failed to generate narration");
+                const audioUrl = `data:audio/mpeg;base64,${data.audio}`;
+                const audio = new Audio(audioUrl);
+                audioRef.current = audio;
+                audio.onended = () => setNarrationPlaying(false);
+                audio.play();
+                setNarrationPlaying(true);
+              } catch (e) {
+                toast.error("Failed to load audio debrief");
+              } finally {
+                setNarrationLoading(false);
+              }
+            }}
+            disabled={narrationLoading}
+            className="neo-btn bg-gradient-to-r from-primary to-blue-600 text-primary-foreground flex items-center gap-2"
+          >
+            {narrationLoading ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Generating Audio...</>
+            ) : narrationPlaying ? (
+              <><Pause className="h-4 w-4" /> Pause Debrief</>
+            ) : (
+              <><Headphones className="h-4 w-4" /> Listen to Your Debrief</>
+            )}
+          </button>
+          <Link to={`/negotiation/${id}`} className="neo-btn bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-2">
+            <DollarSign className="h-4 w-4" /> Practice Salary Negotiation
+          </Link>
+        </div>
+
         <div className="neo-card mb-8 bg-ink p-6 text-primary-foreground md:p-8">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
             <div className="text-center">

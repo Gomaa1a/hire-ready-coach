@@ -12,6 +12,7 @@ import Signup from "./pages/auth/Signup";
 import Dashboard from "./pages/Dashboard";
 import NewInterview from "./pages/interview/NewInterview";
 import LiveInterview from "./pages/interview/LiveInterview";
+import NegotiationSim from "./pages/interview/NegotiationSim";
 import Report from "./pages/Report";
 import Pricing from "./pages/Pricing";
 import Onboarding from "./pages/Onboarding";
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/interview/new" element={<ProtectedRoute children={<NewInterview />} />} />
             <Route path="/interview/:id" element={<ProtectedRoute children={<LiveInterview />} />} />
             <Route path="/report/:id" element={<ProtectedRoute children={<Report />} />} />
+            <Route path="/negotiation/:interviewId" element={<ProtectedRoute children={<NegotiationSim />} />} />
             <Route path="/onboarding" element={<ProtectedRoute children={<Onboarding />} />} />
             <Route path="/pricing" element={<ProtectedRoute children={<Pricing />} />} />
             <Route path="/admin" element={<AdminRoute children={<Admin />} />} />

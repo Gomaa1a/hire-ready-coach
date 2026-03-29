@@ -23,3 +23,15 @@ verify_jwt = false
 
 [functions.get-platform-stats]
 verify_jwt = false
+
+[functions.pre-interview-coach]
+verify_jwt = false
+
+[functions.narrate-report]
+verify_jwt = false
+
+[functions.negotiation-session-token]
+verify_jwt = false
+
+[functions.score-negotiation]
+verify_jwt = false

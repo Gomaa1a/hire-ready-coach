@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, User, CheckCircle2 } from "lucide-react";
+import { Mic, MicOff, PhoneOff, User, CheckCircle2, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInterview } from "@/hooks/useRealtimeInterview";
@@ -18,6 +18,7 @@ const LiveInterview = () => {
   const [persona, setPersona] = useState<InterviewerPersona | null>(null);
   const [lobbyCountdown, setLobbyCountdown] = useState(5);
   const [preparing, setPreparing] = useState(false);
+  const [coachingTip, setCoachingTip] = useState<string | null>(null);
   const endingRef = useRef(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
@@ -110,6 +111,13 @@ const LiveInterview = () => {
       // Enter lobby phase
       setLobbyCountdown(5);
       setPhase("lobby");
+
+      // Fetch coaching tip in background (non-blocking)
+      supabase.functions.invoke("pre-interview-coach", {
+        body: { interviewId: id },
+      }).then(({ data }) => {
+        if (data?.coachingTip) setCoachingTip(data.coachingTip);
+      }).catch(() => {}); // silent fail — tip is optional
     } catch (err: any) {
       console.error("Failed to start:", err);
       toast.error("Failed to prepare. Please try again.");
@@ -267,15 +275,24 @@ const LiveInterview = () => {
             </div>
           </div>
 
-          {/* Tips */}
-          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-6 py-4 text-left">
-            <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Quick tips</p>
-            <ul className="space-y-1.5 text-sm text-white/50">
-              <li>• Speak clearly and at a natural pace</li>
-              <li>• Take a moment to think before answering</li>
-              <li>• It's okay to ask for clarification</li>
-            </ul>
-          </div>
+          {/* Tips or Coaching Tip */}
+          {coachingTip ? (
+            <div className="rounded-xl bg-blue-500/[0.06] border border-blue-500/20 px-6 py-4 text-left animate-fade-in">
+              <p className="text-xs font-medium text-blue-400/70 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Lightbulb className="h-3.5 w-3.5" /> Coach says
+              </p>
+              <p className="text-sm text-white/70 leading-relaxed">{coachingTip}</p>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-6 py-4 text-left">
+              <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Quick tips</p>
+              <ul className="space-y-1.5 text-sm text-white/50">
+                <li>• Speak clearly and at a natural pace</li>
+                <li>• Take a moment to think before answering</li>
+                <li>• It's okay to ask for clarification</li>
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     );
