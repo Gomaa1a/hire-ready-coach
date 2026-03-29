@@ -147,6 +147,50 @@ export type Database = {
           },
         ]
       }
+      negotiation_sessions: {
+        Row: {
+          assertiveness_score: number | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          interview_id: string
+          outcome: string | null
+          professionalism_score: number | null
+          tips: Json | null
+          user_id: string
+        }
+        Insert: {
+          assertiveness_score?: number | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          interview_id: string
+          outcome?: string | null
+          professionalism_score?: number | null
+          tips?: Json | null
+          user_id: string
+        }
+        Update: {
+          assertiveness_score?: number | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          interview_id?: string
+          outcome?: string | null
+          professionalism_score?: number | null
+          tips?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "negotiation_sessions_interview_id_fkey"
+            columns: ["interview_id"]
+            isOneToOne: false
+            referencedRelation: "interviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number | null
