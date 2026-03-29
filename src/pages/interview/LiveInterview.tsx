@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, User } from "lucide-react";
+import { Mic, MicOff, PhoneOff, User, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInterview } from "@/hooks/useRealtimeInterview";
+import { generatePersona, type InterviewerPersona } from "@/components/interview/InterviewerPersona";
+
+type Phase = "pre-join" | "lobby" | "active" | "debrief";
 
 const LiveInterview = () => {
   const navigate = useNavigate();
@@ -11,10 +14,13 @@ const LiveInterview = () => {
   const [interviewData, setInterviewData] = useState<{ role: string; level: string } | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(900);
+  const [phase, setPhase] = useState<Phase>("pre-join");
+  const [persona, setPersona] = useState<InterviewerPersona | null>(null);
+  const [lobbyCountdown, setLobbyCountdown] = useState(5);
   const [preparing, setPreparing] = useState(false);
   const endingRef = useRef(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const startTimeRef = useRef<number>(0);
 
   const {
     startSession,
@@ -44,9 +50,9 @@ const LiveInterview = () => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [conversationLog]);
 
-  // Timer
+  // Timer (only in active phase)
   useEffect(() => {
-    if (!isConnected) return;
+    if (phase !== "active" || !isConnected) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -58,38 +64,68 @@ const LiveInterview = () => {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isConnected]);
+  }, [phase, isConnected]);
+
+  // Lobby countdown
+  useEffect(() => {
+    if (phase !== "lobby") return;
+    const timer = setInterval(() => {
+      setLobbyCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          // Transition to active and start session
+          setPhase("active");
+          startTimeRef.current = Date.now();
+          if (id) {
+            startSession(id).catch((err) => {
+              console.error("Failed to start session:", err);
+              toast.error("Connection failed. Please try again.");
+              setPhase("pre-join");
+            });
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [phase, id, startSession]);
 
   const handleStart = useCallback(async () => {
     if (!id) return;
     setPreparing(true);
 
     try {
-      // Step 1: Generate question bank
+      // Generate persona based on role
+      const p = generatePersona(interviewData?.role);
+      setPersona(p);
+
+      // Generate question bank
       toast.info("Preparing your interview questions...");
       const { error: qbErr } = await supabase.functions.invoke("generate-question-bank", {
         body: { interviewId: id },
       });
       if (qbErr) throw new Error("Failed to generate questions");
 
-      // Step 2: Start realtime session
-      toast.info("Connecting to interviewer...");
-      await startSession(id);
-      toast.success("Connected! Interview starting...");
+      // Enter lobby phase
+      setLobbyCountdown(5);
+      setPhase("lobby");
     } catch (err: any) {
       console.error("Failed to start:", err);
-      toast.error("Failed to connect. Please check microphone permissions and try again.");
+      toast.error("Failed to prepare. Please try again.");
     } finally {
       setPreparing(false);
     }
-  }, [id, startSession]);
+  }, [id, interviewData, startSession]);
 
   const handleEndInterview = useCallback(async () => {
     if (endingRef.current) return;
     endingRef.current = true;
 
     await endSession();
-    toast.success("Great work! Processing results...");
+
+    // Enter debrief phase
+    setPhase("debrief");
 
     if (id) {
       try {
@@ -111,7 +147,10 @@ const LiveInterview = () => {
       }
     }
 
-    navigate(`/report/${id || "demo"}`);
+    // Navigate after debrief
+    setTimeout(() => {
+      navigate(`/report/${id || "demo"}`);
+    }, 4000);
   }, [endSession, navigate, id]);
 
   const toggleMute = useCallback(() => {
@@ -133,15 +172,24 @@ const LiveInterview = () => {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const pct = timeLeft / 900;
-  const timerColor = pct > 0.4 ? "text-success" : pct > 0.15 ? "text-coral" : "text-destructive";
-  const lastEntry = conversationLog.slice(-1)[0];
+  const getInterviewDuration = () => {
+    if (!startTimeRef.current) return "0:00";
+    const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
 
-  // ===== PRE-JOIN SCREEN =====
-  if (!isConnected && connectionStatus !== "connecting") {
+  const questionsAnswered = conversationLog.filter((e) => e.role === "user").length;
+
+  const pct = timeLeft / 900;
+  const timerColor = pct > 0.4 ? "text-green-400" : pct > 0.15 ? "text-amber-400" : "text-red-400";
+
+  // ===== PHASE 1: PRE-JOIN =====
+  if (phase === "pre-join") {
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-[#0f0f0f] px-4">
-        <div className="flex flex-col items-center gap-6 text-center max-w-lg">
+      <div className="flex h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4">
+        <div className="flex flex-col items-center gap-6 text-center max-w-lg animate-fade-in">
           <div className="relative flex h-28 w-28 items-center justify-center rounded-full border-2 border-blue-500/30 bg-blue-500/10">
             <Mic className="h-12 w-12 text-blue-400" />
             {!preparing && (
@@ -167,7 +215,7 @@ const LiveInterview = () => {
 
           <p className="text-sm leading-relaxed text-white/50">
             Real-time voice interview powered by AI. Speak naturally — the interviewer
-            listens, responds, and adapts just like a real conversation. No lag.
+            listens, responds, and adapts just like a real conversation.
           </p>
 
           <button
@@ -189,9 +237,91 @@ const LiveInterview = () => {
     );
   }
 
-  // ===== ACTIVE INTERVIEW =====
+  // ===== PHASE 2: WAITING ROOM LOBBY =====
+  if (phase === "lobby") {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4">
+        <div className="flex flex-col items-center gap-8 text-center max-w-md animate-fade-in">
+          {/* Interviewer Persona Card */}
+          {persona && (
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border border-white/10">
+                  <span className="text-2xl font-bold text-white/80">{persona.initials}</span>
+                </div>
+                <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-green-500 border-2 border-[#0a0a0a]" />
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-white">{persona.name}</p>
+                <p className="text-sm text-white/50">{persona.title}</p>
+                <p className="text-xs text-blue-400/70 mt-0.5">{persona.company}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Countdown */}
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-sm text-white/40">Your interviewer is joining in</p>
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-blue-500/40 bg-blue-500/10">
+              <span className="text-2xl font-bold text-blue-400 tabular-nums">{lobbyCountdown}</span>
+            </div>
+          </div>
+
+          {/* Tips */}
+          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-6 py-4 text-left">
+            <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Quick tips</p>
+            <ul className="space-y-1.5 text-sm text-white/50">
+              <li>• Speak clearly and at a natural pace</li>
+              <li>• Take a moment to think before answering</li>
+              <li>• It's okay to ask for clarification</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== PHASE 4: DEBRIEF =====
+  if (phase === "debrief") {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4">
+        <div className="flex flex-col items-center gap-6 text-center max-w-md animate-fade-in">
+          {/* Checkmark */}
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500/15 border border-green-500/30">
+            <CheckCircle2 className="h-10 w-10 text-green-400" />
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-bold text-white">Interview Complete</h1>
+            <p className="mt-2 text-sm text-white/50">Great work! Let's see how you did.</p>
+          </div>
+
+          {/* Stats */}
+          <div className="flex items-center gap-8">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-white tabular-nums">{getInterviewDuration()}</p>
+              <p className="text-xs text-white/40 mt-1">Duration</p>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div className="text-center">
+              <p className="text-2xl font-bold text-white tabular-nums">{questionsAnswered}</p>
+              <p className="text-xs text-white/40 mt-1">Questions Answered</p>
+            </div>
+          </div>
+
+          {/* Loading indicator */}
+          <div className="flex items-center gap-2 mt-4">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-400" />
+            <span className="text-sm text-white/40">Generating your report…</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== PHASE 3: ACTIVE INTERVIEW =====
   return (
-    <div className="relative flex h-screen flex-col bg-[#0f0f0f] overflow-hidden">
+    <div className="relative flex h-screen flex-col bg-[#0a0a0a] overflow-hidden">
       {/* Top overlay */}
       <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-3">
@@ -209,7 +339,7 @@ const LiveInterview = () => {
         )}
       </div>
 
-      {/* Center: AI Avatar */}
+      {/* Center: Interviewer Avatar */}
       <div className="flex flex-1 items-center justify-center">
         <div className="flex flex-col items-center gap-5">
           <div className="relative">
@@ -221,7 +351,7 @@ const LiveInterview = () => {
                   style={{ animationDuration: "1.5s" }}
                 />
                 <div
-                  className="absolute inset-0 -m-8 animate-ping rounded-full bg-blue-500/8"
+                  className="absolute inset-0 -m-8 animate-ping rounded-full bg-blue-500/[0.08]"
                   style={{ animationDuration: "2s" }}
                 />
               </>
@@ -234,7 +364,11 @@ const LiveInterview = () => {
                   : "bg-white/5"
               }`}
             >
-              <User className="h-16 w-16 text-white/50" />
+              {persona ? (
+                <span className="text-3xl font-bold text-white/60">{persona.initials}</span>
+              ) : (
+                <User className="h-16 w-16 text-white/50" />
+              )}
 
               {/* Waveform bars */}
               {isAISpeaking && (
@@ -256,8 +390,13 @@ const LiveInterview = () => {
           </div>
 
           <div className="text-center">
-            <p className="text-sm font-semibold text-white">AI Interviewer</p>
-            <p className="mt-0.5 text-xs text-white/40">
+            <p className="text-sm font-semibold text-white">
+              {persona ? persona.name : "AI Interviewer"}
+            </p>
+            {persona && (
+              <p className="text-xs text-white/30 mt-0.5">{persona.title}</p>
+            )}
+            <p className="mt-1 text-xs text-white/40">
               {isAISpeaking
                 ? "Speaking"
                 : connectionStatus === "connecting"
@@ -293,7 +432,7 @@ const LiveInterview = () => {
                   }`}
                 >
                   <span className="font-semibold text-xs uppercase tracking-wider mr-2 opacity-60">
-                    {entry.role === "assistant" ? "Interviewer" : "You"}
+                    {entry.role === "assistant" ? (persona?.name.split(" ")[0] || "Interviewer") : "You"}
                   </span>
                   {entry.text}
                 </div>
