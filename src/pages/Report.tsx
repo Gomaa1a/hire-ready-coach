@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2, TrendingUp, DollarSign, Building2, Lightbulb } from "lucide-react";
+import { ArrowLeft, RefreshCw, CheckCircle, AlertTriangle, BookOpen, Loader2, TrendingUp, DollarSign, Building2, Lightbulb, Headphones, Pause, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import ShareAchievement from "@/components/report/ShareAchievement";
