@@ -142,10 +142,11 @@ const NewInterview = () => {
           <div className="mb-2 flex justify-between text-sm font-semibold">
             <span className={step >= 1 ? "text-primary" : "text-muted-foreground"}>1. Role</span>
             <span className={step >= 2 ? "text-primary" : "text-muted-foreground"}>2. Level</span>
-            <span className={step >= 3 ? "text-primary" : "text-muted-foreground"}>3. CV</span>
+            <span className={step >= 3 ? "text-primary" : "text-muted-foreground"}>3. Style</span>
+            <span className={step >= 4 ? "text-primary" : "text-muted-foreground"}>4. CV</span>
           </div>
           <div className="flex gap-2">
-            {[1, 2, 3].map((s) => (
+            {[1, 2, 3, 4].map((s) => (
               <div key={s} className={`h-2 flex-1 rounded-full transition-colors ${s <= step ? "bg-primary" : "bg-muted"}`} />
             ))}
           </div>
