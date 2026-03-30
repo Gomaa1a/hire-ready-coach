@@ -8,15 +8,25 @@ import { toast } from "sonner";
 
 const roles = [
   { id: "Software Engineer", label: "Software Engineer", emoji: "💻" },
-  { id: "Frontend Developer", label: "Frontend Developer", emoji: "🎨" },
-  { id: "Data Scientist", label: "Data Scientist", emoji: "📊" },
   { id: "Product Manager", label: "Product Manager", emoji: "📋" },
-  { id: "UX Designer", label: "UX Designer", emoji: "🎯" },
+  { id: "Data Scientist", label: "Data Scientist", emoji: "📊" },
   { id: "Marketing Manager", label: "Marketing Manager", emoji: "📣" },
   { id: "Finance Analyst", label: "Finance Analyst", emoji: "💰" },
-  { id: "DevOps Engineer", label: "DevOps Engineer", emoji: "☁️" },
-  { id: "AI/ML Engineer", label: "AI/ML Engineer", emoji: "🤖" },
-  { id: "Business Analyst", label: "Business Analyst", emoji: "🏢" },
+  { id: "Sales Representative", label: "Sales Representative", emoji: "🤝" },
+  { id: "Human Resources", label: "Human Resources", emoji: "👥" },
+  { id: "Project Manager", label: "Project Manager", emoji: "📌" },
+  { id: "Graphic Designer", label: "Graphic Designer", emoji: "🎨" },
+  { id: "Accountant", label: "Accountant", emoji: "🧮" },
+  { id: "Nurse", label: "Nurse", emoji: "🏥" },
+  { id: "Teacher", label: "Teacher", emoji: "📚" },
+  { id: "Legal Counsel", label: "Legal Counsel", emoji: "⚖️" },
+  { id: "Operations Manager", label: "Operations Manager", emoji: "⚙️" },
+  { id: "Customer Success", label: "Customer Success", emoji: "🌟" },
+  { id: "Supply Chain Manager", label: "Supply Chain Manager", emoji: "📦" },
+  { id: "Architect", label: "Architect", emoji: "🏗️" },
+  { id: "Journalist", label: "Journalist", emoji: "✍️" },
+  { id: "Consultant", label: "Consultant", emoji: "💼" },
+  { id: "Research Scientist", label: "Research Scientist", emoji: "🔬" },
 ];
 
 const levels = [
