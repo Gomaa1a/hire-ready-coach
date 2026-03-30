@@ -231,11 +231,44 @@ const NewInterview = () => {
 
         {step === 3 && (
           <div className="animate-fadeUp">
+            <h1 className="mb-2 font-heading text-3xl font-extrabold">Interview style</h1>
+            <p className="mb-8 text-muted-foreground">What type of interview do you want to practice?</p>
+            <div className="mb-8 space-y-3">
+              {interviewTypes.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => setSelectedType(type.id)}
+                  className={`neo-card flex w-full items-center gap-4 p-5 text-left transition-all ${
+                    selectedType === type.id ? "border-primary bg-primary/10 ring-2 ring-primary" : "bg-card hover:bg-muted"
+                  }`}
+                  style={{ boxShadow: selectedType === type.id ? "5px 5px 0 hsl(var(--primary))" : "5px 5px 0 hsl(var(--ink))" }}
+                >
+                  <span className="text-2xl">{type.emoji}</span>
+                  <div className="flex-1">
+                    <div className={`font-heading font-bold ${selectedType === type.id ? "text-primary" : ""}`}>{type.label}</div>
+                    <div className="text-sm text-muted-foreground">{type.desc}</div>
+                  </div>
+                  {selectedType === type.id && <Check className="h-6 w-6 text-primary" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-4">
+              <button onClick={() => setStep(2)} className="neo-btn bg-background text-foreground"><ArrowLeft className="h-4 w-4" /> Back</button>
+              <button onClick={() => setStep(4)} className="neo-btn bg-primary text-primary-foreground">
+                Continue <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="animate-fadeUp">
             <h1 className="mb-2 font-heading text-3xl font-extrabold">Upload your CV</h1>
             <p className="mb-6 text-muted-foreground">Optional, but helps us tailor questions to your experience.</p>
             <div className="mb-6 flex flex-wrap gap-2">
               <span className="neo-badge bg-primary text-primary-foreground">{roleLabel}</span>
               <span className="neo-badge bg-muted text-muted-foreground">{levelLabel}</span>
+              <span className="neo-badge bg-muted text-muted-foreground">{interviewTypes.find((t) => t.id === selectedType)?.label}</span>
             </div>
 
             <label
@@ -267,7 +300,7 @@ const NewInterview = () => {
             )}
 
             <div className="flex gap-4">
-              <button onClick={() => setStep(2)} className="neo-btn bg-background text-foreground"><ArrowLeft className="h-4 w-4" /> Back</button>
+              <button onClick={() => setStep(3)} className="neo-btn bg-background text-foreground"><ArrowLeft className="h-4 w-4" /> Back</button>
               <button
                 onClick={handleStartInterview}
                 disabled={credits === 0 || starting}
