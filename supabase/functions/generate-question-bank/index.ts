@@ -12,6 +12,13 @@ const bodySchema = z.object({
   interviewId: z.string().uuid(),
 });
 
+const interviewTypeContext: Record<string, string> = {
+  behavioral: "This is a BEHAVIORAL interview. Focus competencies on past experiences, leadership stories, conflict resolution, teamwork, and decision-making using the STAR method.",
+  technical: "This is a TECHNICAL interview. Focus competencies on deep domain knowledge, problem-solving methodology, system design, debugging approaches, and technical trade-offs.",
+  case_study: "This is a CASE STUDY interview. Focus competencies on analytical thinking, structured problem-solving, data-driven reasoning, business acumen, and communication of recommendations.",
+  stress: "This is a STRESS interview. Focus competencies on composure under pressure, rapid decision-making, handling ambiguity, defending positions, and recovering from difficult questions.",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -50,7 +57,7 @@ serve(async (req) => {
     // Fetch interview details + CV
     const { data: interview, error: intErr } = await supabase
       .from("interviews")
-      .select("role, level, cv_url, user_id")
+      .select("role, level, cv_url, user_id, interview_type")
       .eq("id", interviewId)
       .single();
 
@@ -81,6 +88,9 @@ serve(async (req) => {
       ? `\n\nThe candidate's CV/resume content:\n${cvContext}\n\nExtract key highlights: notable projects, specific technologies, leadership experience, career progression, and anything unique about this candidate.`
       : "";
 
+    const interviewType = interview.interview_type || "behavioral";
+    const typeContext = interviewTypeContext[interviewType] || interviewTypeContext.behavioral;
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -94,20 +104,21 @@ serve(async (req) => {
             role: "system",
             content: `You are an expert interviewer preparing a topic guide for a live conversational interview. This is NOT a list of questions to read — it's a briefing document that tells a smart AI interviewer what competency areas to explore, what signals to look for, and what makes this candidate unique.
 
-The interview is for a ${interview.level} ${interview.role} position.${cvSection}`,
+The interview is for a ${interview.level} ${interview.role} position.
+
+${typeContext}${cvSection}`,
           },
           {
             role: "user",
             content: `Create a competency-based topic guide for interviewing a ${interview.level} ${interview.role}. 
 
 The guide should:
-1. Identify 5-6 competency areas relevant to this specific role and level
+1. Identify 5-6 competency areas relevant to this specific role, level, and interview type (${interviewType})
 2. For each area, describe what good looks like and what red flags to watch for
 3. Extract specific highlights from the CV that the interviewer can reference naturally in conversation
 4. Suggest a personalized icebreaker based on something interesting from their background
 5. Include evaluation signals — not scripted questions
-
-The interviewer will use this guide to have a natural, adaptive conversation — NOT to read questions from a list.`,
+6. Include a difficulty escalation guide showing what easy, medium, hard, and expert-level probing looks like for this specific role`,
           },
         ],
         tools: [
@@ -124,11 +135,11 @@ The interviewer will use this guide to have a natural, adaptive conversation —
                     items: {
                       type: "object",
                       properties: {
-                        area: { type: "string", description: "Competency area name, e.g. 'System Design', 'Team Leadership'" },
+                        area: { type: "string", description: "Competency area name" },
                         why: { type: "string", description: "Why this area matters for this specific role and level" },
-                        signals_to_look_for: { type: "array", items: { type: "string" }, description: "What good answers sound like — specific behaviors, patterns, depth indicators" },
+                        signals_to_look_for: { type: "array", items: { type: "string" }, description: "What good answers sound like" },
                         red_flags: { type: "array", items: { type: "string" }, description: "Warning signs in responses" },
-                        depth_level: { type: "string", enum: ["surface", "moderate", "deep"], description: "How deeply to probe this area given the candidate's level" },
+                        depth_level: { type: "string", enum: ["surface", "moderate", "deep"], description: "How deeply to probe" },
                       },
                       required: ["area", "why", "signals_to_look_for", "red_flags", "depth_level"],
                       additionalProperties: false,
@@ -137,18 +148,29 @@ The interviewer will use this guide to have a natural, adaptive conversation —
                   candidate_highlights: {
                     type: "array",
                     items: { type: "string" },
-                    description: "Key things from the CV the interviewer can reference naturally, e.g. 'Led the migration from monolith to microservices at Acme Corp'",
+                    description: "Key things from the CV the interviewer can reference naturally",
                   },
                   suggested_icebreaker: {
                     type: "string",
-                    description: "A natural, personalized opening based on something interesting from their background. NOT a generic greeting.",
+                    description: "A natural, personalized opening based on something interesting from their background",
                   },
                   level_expectations: {
                     type: "string",
-                    description: "What depth and maturity of answers to expect given the candidate's seniority level. Helps calibrate difficulty.",
+                    description: "What depth and maturity of answers to expect given the candidate's seniority level",
+                  },
+                  difficulty_escalation: {
+                    type: "object",
+                    properties: {
+                      level_3_easy: { type: "string", description: "What easy questions look like for this role" },
+                      level_5_medium: { type: "string", description: "What medium questions look like — real-world application" },
+                      level_7_hard: { type: "string", description: "What hard questions look like — edge cases, failures, scale" },
+                      level_10_extreme: { type: "string", description: "What expert questions look like — novel scenarios, no-right-answer dilemmas" },
+                    },
+                    required: ["level_3_easy", "level_5_medium", "level_7_hard", "level_10_extreme"],
+                    additionalProperties: false,
                   },
                 },
-                required: ["competencies", "candidate_highlights", "suggested_icebreaker", "level_expectations"],
+                required: ["competencies", "candidate_highlights", "suggested_icebreaker", "level_expectations", "difficulty_escalation"],
                 additionalProperties: false,
               },
             },
@@ -176,7 +198,7 @@ The interviewer will use this guide to have a natural, adaptive conversation —
 
     const topicGuide = JSON.parse(toolCall.function.arguments);
 
-    // Save topic guide to interview (stored in question_bank column)
+    // Save topic guide to interview
     const { error: updateErr } = await supabase
       .from("interviews")
       .update({ question_bank: topicGuide })

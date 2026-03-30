@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, User, CheckCircle2, Lightbulb } from "lucide-react";
+import { Mic, MicOff, PhoneOff, User, CheckCircle2, Lightbulb, Video, VideoOff, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInterview } from "@/hooks/useRealtimeInterview";
+import { useSpeechAnalytics } from "@/hooks/useSpeechAnalytics";
 import { generatePersona, type InterviewerPersona } from "@/components/interview/InterviewerPersona";
 
 type Phase = "pre-join" | "lobby" | "active" | "debrief";
@@ -19,9 +20,13 @@ const LiveInterview = () => {
   const [lobbyCountdown, setLobbyCountdown] = useState(5);
   const [preparing, setPreparing] = useState(false);
   const [coachingTip, setCoachingTip] = useState<string | null>(null);
+  const [showWebcam, setShowWebcam] = useState(true);
+  const [isTakingNotes, setIsTakingNotes] = useState(false);
   const endingRef = useRef(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
+  const webcamRef = useRef<HTMLVideoElement>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
 
   const {
     startSession,
@@ -32,6 +37,8 @@ const LiveInterview = () => {
     connectionStatus,
     getStream,
   } = useRealtimeInterview();
+
+  const analytics = useSpeechAnalytics(conversationLog);
 
   // Load interview data
   useEffect(() => {
@@ -50,6 +57,48 @@ const LiveInterview = () => {
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [conversationLog]);
+
+  // Start webcam when active
+  useEffect(() => {
+    if (phase === "active" && showWebcam) {
+      navigator.mediaDevices
+        .getUserMedia({ video: { width: 160, height: 160, facingMode: "user" } })
+        .then((stream) => {
+          webcamStreamRef.current = stream;
+          if (webcamRef.current) {
+            webcamRef.current.srcObject = stream;
+          }
+        })
+        .catch(() => {
+          // webcam not available, hide silently
+          setShowWebcam(false);
+        });
+    }
+    return () => {
+      if (webcamStreamRef.current) {
+        webcamStreamRef.current.getTracks().forEach((t) => t.stop());
+        webcamStreamRef.current = null;
+      }
+    };
+  }, [phase, showWebcam]);
+
+  // "Taking notes" state — show between user finishing and AI starting
+  useEffect(() => {
+    if (conversationLog.length === 0) return;
+    const lastEntry = conversationLog[conversationLog.length - 1];
+    if (lastEntry.role === "user" && !isAISpeaking) {
+      setIsTakingNotes(true);
+      const timeout = setTimeout(() => setIsTakingNotes(false), 3000);
+      return () => clearTimeout(timeout);
+    } else {
+      setIsTakingNotes(false);
+    }
+  }, [conversationLog, isAISpeaking]);
+
+  // Clear taking notes when AI starts speaking
+  useEffect(() => {
+    if (isAISpeaking) setIsTakingNotes(false);
+  }, [isAISpeaking]);
 
   // Timer (only in active phase)
   useEffect(() => {
@@ -74,7 +123,6 @@ const LiveInterview = () => {
       setLobbyCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          // Transition to active and start session
           setPhase("active");
           startTimeRef.current = Date.now();
           if (id) {
@@ -97,27 +145,23 @@ const LiveInterview = () => {
     setPreparing(true);
 
     try {
-      // Generate persona based on role
       const p = generatePersona(interviewData?.role);
       setPersona(p);
 
-      // Generate question bank
       toast.info("Preparing your interview...");
       const { error: qbErr } = await supabase.functions.invoke("generate-question-bank", {
         body: { interviewId: id },
       });
       if (qbErr) throw new Error("Failed to prepare interview");
 
-      // Enter lobby phase
       setLobbyCountdown(5);
       setPhase("lobby");
 
-      // Fetch coaching tip in background (non-blocking)
       supabase.functions.invoke("pre-interview-coach", {
         body: { interviewId: id },
       }).then(({ data }) => {
         if (data?.coachingTip) setCoachingTip(data.coachingTip);
-      }).catch(() => {}); // silent fail — tip is optional
+      }).catch(() => {});
     } catch (err: any) {
       console.error("Failed to start:", err);
       toast.error("Failed to prepare. Please try again.");
@@ -130,9 +174,13 @@ const LiveInterview = () => {
     if (endingRef.current) return;
     endingRef.current = true;
 
-    await endSession();
+    // Stop webcam
+    if (webcamStreamRef.current) {
+      webcamStreamRef.current.getTracks().forEach((t) => t.stop());
+      webcamStreamRef.current = null;
+    }
 
-    // Enter debrief phase
+    await endSession();
     setPhase("debrief");
 
     if (id) {
@@ -155,7 +203,6 @@ const LiveInterview = () => {
       }
     }
 
-    // Navigate after debrief
     setTimeout(() => {
       navigate(`/report/${id || "demo"}`);
     }, 4000);
@@ -192,6 +239,36 @@ const LiveInterview = () => {
 
   const pct = timeLeft / 900;
   const timerColor = pct > 0.4 ? "text-green-400" : pct > 0.15 ? "text-amber-400" : "text-red-400";
+
+  // Speech analytics badge colors
+  const fillerColor = analytics.fillerRate === "high" ? "text-red-400 bg-red-500/10" : analytics.fillerRate === "moderate" ? "text-amber-400 bg-amber-500/10" : "text-green-400 bg-green-500/10";
+  const paceColor = analytics.paceStatus === "fast" ? "text-amber-400 bg-amber-500/10" : analytics.paceStatus === "slow" ? "text-blue-400 bg-blue-500/10" : "text-green-400 bg-green-500/10";
+
+  // Interviewer status text
+  const getInterviewerStatus = () => {
+    if (isAISpeaking) return "Speaking";
+    if (isTakingNotes) return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="text-amber-400/70">✍️ Taking notes</span>
+        <span className="flex gap-0.5">
+          <span className="h-1 w-1 rounded-full bg-amber-400/50 animate-bounce" style={{ animationDelay: "0s" }} />
+          <span className="h-1 w-1 rounded-full bg-amber-400/50 animate-bounce" style={{ animationDelay: "0.15s" }} />
+          <span className="h-1 w-1 rounded-full bg-amber-400/50 animate-bounce" style={{ animationDelay: "0.3s" }} />
+        </span>
+      </span>
+    );
+    if (connectionStatus === "connecting") return (
+      <span className="inline-flex items-center gap-1">
+        Connecting
+        <span className="flex gap-0.5">
+          <span className="h-1 w-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "0s" }} />
+          <span className="h-1 w-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "0.15s" }} />
+          <span className="h-1 w-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "0.3s" }} />
+        </span>
+      </span>
+    );
+    return "Listening";
+  };
 
   // ===== PHASE 1: PRE-JOIN =====
   if (phase === "pre-join") {
@@ -250,7 +327,6 @@ const LiveInterview = () => {
     return (
       <div className="flex h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4">
         <div className="flex flex-col items-center gap-8 text-center max-w-md animate-fade-in">
-          {/* Interviewer Persona Card */}
           {persona && (
             <div className="flex flex-col items-center gap-4">
               <div className="relative">
@@ -267,7 +343,6 @@ const LiveInterview = () => {
             </div>
           )}
 
-          {/* Countdown */}
           <div className="flex flex-col items-center gap-3">
             <p className="text-sm text-white/40">Your interviewer is joining in</p>
             <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-blue-500/40 bg-blue-500/10">
@@ -275,7 +350,6 @@ const LiveInterview = () => {
             </div>
           </div>
 
-          {/* Tips or Coaching Tip */}
           {coachingTip ? (
             <div className="rounded-xl bg-blue-500/[0.06] border border-blue-500/20 px-6 py-4 text-left animate-fade-in">
               <p className="text-xs font-medium text-blue-400/70 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -303,7 +377,6 @@ const LiveInterview = () => {
     return (
       <div className="flex h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4">
         <div className="flex flex-col items-center gap-6 text-center max-w-md animate-fade-in">
-          {/* Checkmark */}
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500/15 border border-green-500/30">
             <CheckCircle2 className="h-10 w-10 text-green-400" />
           </div>
@@ -313,7 +386,6 @@ const LiveInterview = () => {
             <p className="mt-2 text-sm text-white/50">Great work! Let's see how you did.</p>
           </div>
 
-          {/* Stats */}
           <div className="flex items-center gap-8">
             <div className="text-center">
               <p className="text-2xl font-bold text-white tabular-nums">{getInterviewDuration()}</p>
@@ -324,9 +396,15 @@ const LiveInterview = () => {
               <p className="text-2xl font-bold text-white tabular-nums">{topicsDiscussed}</p>
               <p className="text-xs text-white/40 mt-1">Responses</p>
             </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div className="text-center">
+              <p className={`text-2xl font-bold tabular-nums ${analytics.fillerRate === "high" ? "text-red-400" : analytics.fillerRate === "moderate" ? "text-amber-400" : "text-green-400"}`}>
+                {analytics.fillerCount}
+              </p>
+              <p className="text-xs text-white/40 mt-1">Fillers</p>
+            </div>
           </div>
 
-          {/* Loading indicator */}
           <div className="flex items-center gap-2 mt-4">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-400" />
             <span className="text-sm text-white/40">Generating your report…</span>
@@ -347,6 +425,20 @@ const LiveInterview = () => {
             {formatTime(timeLeft)}
           </span>
         </div>
+
+        {/* Speech analytics bar */}
+        {analytics.totalWords > 10 && (
+          <div className="flex items-center gap-2">
+            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${fillerColor}`}>
+              {analytics.fillerRate === "high" && <AlertTriangle className="h-3 w-3" />}
+              {analytics.fillerCount} fillers
+            </div>
+            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${paceColor}`}>
+              {analytics.wordsPerMinute} wpm
+            </div>
+          </div>
+        )}
+
         {interviewData && (
           <div className="flex items-center gap-2 rounded-full bg-white/5 backdrop-blur-sm px-3 py-1.5">
             <span className="text-xs font-medium text-white/70">
@@ -360,7 +452,6 @@ const LiveInterview = () => {
       <div className="flex flex-1 items-center justify-center">
         <div className="flex flex-col items-center gap-5">
           <div className="relative">
-            {/* Pulse rings when speaking */}
             {isAISpeaking && (
               <>
                 <div
@@ -378,6 +469,8 @@ const LiveInterview = () => {
               className={`relative flex h-36 w-36 items-center justify-center rounded-full transition-all duration-500 ${
                 isAISpeaking
                   ? "bg-blue-500/20 ring-2 ring-blue-500/60 shadow-[0_0_60px_rgba(59,130,246,0.3)]"
+                  : isTakingNotes
+                  ? "bg-amber-500/10 ring-1 ring-amber-500/30"
                   : "bg-white/5"
               }`}
             >
@@ -387,7 +480,6 @@ const LiveInterview = () => {
                 <User className="h-16 w-16 text-white/50" />
               )}
 
-              {/* Waveform bars */}
               {isAISpeaking && (
                 <div className="absolute -bottom-5 flex items-end gap-[3px]">
                   {[0, 1, 2, 3, 4].map((i) => (
@@ -414,28 +506,52 @@ const LiveInterview = () => {
               <p className="text-xs text-white/30 mt-0.5">{persona.title}</p>
             )}
             <p className="mt-1 text-xs text-white/40">
-              {isAISpeaking
-                ? "Speaking"
-                : connectionStatus === "connecting"
-                ? (
-                    <span className="inline-flex items-center gap-1">
-                      Connecting
-                      <span className="flex gap-0.5">
-                        <span className="h-1 w-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "0s" }} />
-                        <span className="h-1 w-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "0.15s" }} />
-                        <span className="h-1 w-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: "0.3s" }} />
-                      </span>
-                    </span>
-                  )
-                : "Listening"}
+              {getInterviewerStatus()}
             </p>
           </div>
         </div>
       </div>
 
+      {/* Webcam self-view (bottom-right) */}
+      {showWebcam && phase === "active" && (
+        <div className="absolute bottom-24 right-5 z-30">
+          <div className="relative">
+            <video
+              ref={webcamRef}
+              autoPlay
+              muted
+              playsInline
+              className="h-[120px] w-[120px] rounded-full object-cover border-2 border-white/20 shadow-lg shadow-black/50"
+              style={{ transform: "scaleX(-1)" }}
+            />
+            <button
+              onClick={() => {
+                setShowWebcam(false);
+                if (webcamStreamRef.current) {
+                  webcamStreamRef.current.getTracks().forEach((t) => t.stop());
+                  webcamStreamRef.current = null;
+                }
+              }}
+              className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/80 text-white/60 hover:text-white transition-colors"
+            >
+              <VideoOff className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Show webcam button when hidden */}
+      {!showWebcam && phase === "active" && (
+        <button
+          onClick={() => setShowWebcam(true)}
+          className="absolute bottom-24 right-5 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/40 hover:text-white hover:bg-white/20 transition-all"
+        >
+          <Video className="h-4 w-4" />
+        </button>
+      )}
+
       {/* Bottom: Transcript + Controls */}
       <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 pb-6">
-        {/* Scrollable transcript */}
         <div className="mx-4 w-full max-w-xl max-h-32 overflow-y-auto">
           {conversationLog.length > 0 ? (
             <div className="space-y-2 px-2">
