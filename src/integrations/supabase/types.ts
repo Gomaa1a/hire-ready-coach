@@ -83,6 +83,7 @@ export type Database = {
           cv_url: string | null
           ended_at: string | null
           id: string
+          interview_type: string
           level: string
           question_bank: Json | null
           role: string
@@ -95,6 +96,7 @@ export type Database = {
           cv_url?: string | null
           ended_at?: string | null
           id?: string
+          interview_type?: string
           level: string
           question_bank?: Json | null
           role: string
@@ -107,6 +109,7 @@ export type Database = {
           cv_url?: string | null
           ended_at?: string | null
           id?: string
+          interview_type?: string
           level?: string
           question_bank?: Json | null
           role?: string

@@ -36,6 +36,13 @@ const levels = [
   { id: "Senior", label: "Senior (5+ yrs)", desc: "Leadership and expertise" },
 ];
 
+const interviewTypes = [
+  { id: "behavioral", label: "Behavioral", emoji: "🗣️", desc: "Past experiences, STAR method, leadership stories" },
+  { id: "technical", label: "Technical", emoji: "🔧", desc: "Deep domain knowledge, problem-solving, system design" },
+  { id: "case_study", label: "Case Study", emoji: "📋", desc: "Analyze a scenario, propose solutions, evaluate trade-offs" },
+  { id: "stress", label: "Stress", emoji: "⚡", desc: "Rapid-fire questions, pressure testing, curveball scenarios" },
+];
+
 const NewInterview = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -44,6 +51,7 @@ const NewInterview = () => {
   const [customRole, setCustomRole] = useState("");
   const [isOtherRole, setIsOtherRole] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<string>("behavioral");
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [credits, setCredits] = useState<number>(0);
   const [starting, setStarting] = useState(false);
@@ -99,7 +107,8 @@ const NewInterview = () => {
         level: selectedLevel,
         status: "active",
         cv_url: cvUrl,
-      })
+        interview_type: selectedType,
+      } as any)
       .select()
       .single();
 
@@ -133,10 +142,11 @@ const NewInterview = () => {
           <div className="mb-2 flex justify-between text-sm font-semibold">
             <span className={step >= 1 ? "text-primary" : "text-muted-foreground"}>1. Role</span>
             <span className={step >= 2 ? "text-primary" : "text-muted-foreground"}>2. Level</span>
-            <span className={step >= 3 ? "text-primary" : "text-muted-foreground"}>3. CV</span>
+            <span className={step >= 3 ? "text-primary" : "text-muted-foreground"}>3. Style</span>
+            <span className={step >= 4 ? "text-primary" : "text-muted-foreground"}>4. CV</span>
           </div>
           <div className="flex gap-2">
-            {[1, 2, 3].map((s) => (
+            {[1, 2, 3, 4].map((s) => (
               <div key={s} className={`h-2 flex-1 rounded-full transition-colors ${s <= step ? "bg-primary" : "bg-muted"}`} />
             ))}
           </div>
@@ -221,11 +231,44 @@ const NewInterview = () => {
 
         {step === 3 && (
           <div className="animate-fadeUp">
+            <h1 className="mb-2 font-heading text-3xl font-extrabold">Interview style</h1>
+            <p className="mb-8 text-muted-foreground">What type of interview do you want to practice?</p>
+            <div className="mb-8 space-y-3">
+              {interviewTypes.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => setSelectedType(type.id)}
+                  className={`neo-card flex w-full items-center gap-4 p-5 text-left transition-all ${
+                    selectedType === type.id ? "border-primary bg-primary/10 ring-2 ring-primary" : "bg-card hover:bg-muted"
+                  }`}
+                  style={{ boxShadow: selectedType === type.id ? "5px 5px 0 hsl(var(--primary))" : "5px 5px 0 hsl(var(--ink))" }}
+                >
+                  <span className="text-2xl">{type.emoji}</span>
+                  <div className="flex-1">
+                    <div className={`font-heading font-bold ${selectedType === type.id ? "text-primary" : ""}`}>{type.label}</div>
+                    <div className="text-sm text-muted-foreground">{type.desc}</div>
+                  </div>
+                  {selectedType === type.id && <Check className="h-6 w-6 text-primary" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-4">
+              <button onClick={() => setStep(2)} className="neo-btn bg-background text-foreground"><ArrowLeft className="h-4 w-4" /> Back</button>
+              <button onClick={() => setStep(4)} className="neo-btn bg-primary text-primary-foreground">
+                Continue <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="animate-fadeUp">
             <h1 className="mb-2 font-heading text-3xl font-extrabold">Upload your CV</h1>
             <p className="mb-6 text-muted-foreground">Optional, but helps us tailor questions to your experience.</p>
             <div className="mb-6 flex flex-wrap gap-2">
               <span className="neo-badge bg-primary text-primary-foreground">{roleLabel}</span>
               <span className="neo-badge bg-muted text-muted-foreground">{levelLabel}</span>
+              <span className="neo-badge bg-muted text-muted-foreground">{interviewTypes.find((t) => t.id === selectedType)?.label}</span>
             </div>
 
             <label
@@ -257,7 +300,7 @@ const NewInterview = () => {
             )}
 
             <div className="flex gap-4">
-              <button onClick={() => setStep(2)} className="neo-btn bg-background text-foreground"><ArrowLeft className="h-4 w-4" /> Back</button>
+              <button onClick={() => setStep(3)} className="neo-btn bg-background text-foreground"><ArrowLeft className="h-4 w-4" /> Back</button>
               <button
                 onClick={handleStartInterview}
                 disabled={credits === 0 || starting}

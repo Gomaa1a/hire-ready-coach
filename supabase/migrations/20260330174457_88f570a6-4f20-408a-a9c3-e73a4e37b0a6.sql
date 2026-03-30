@@ -1,0 +1,1 @@
+ALTER TABLE public.interviews ADD COLUMN interview_type text NOT NULL DEFAULT 'behavioral';
