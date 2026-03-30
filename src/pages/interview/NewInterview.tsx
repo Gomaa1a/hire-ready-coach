@@ -36,6 +36,13 @@ const levels = [
   { id: "Senior", label: "Senior (5+ yrs)", desc: "Leadership and expertise" },
 ];
 
+const interviewTypes = [
+  { id: "behavioral", label: "Behavioral", emoji: "🗣️", desc: "Past experiences, STAR method, leadership stories" },
+  { id: "technical", label: "Technical", emoji: "🔧", desc: "Deep domain knowledge, problem-solving, system design" },
+  { id: "case_study", label: "Case Study", emoji: "📋", desc: "Analyze a scenario, propose solutions, evaluate trade-offs" },
+  { id: "stress", label: "Stress", emoji: "⚡", desc: "Rapid-fire questions, pressure testing, curveball scenarios" },
+];
+
 const NewInterview = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -44,6 +51,7 @@ const NewInterview = () => {
   const [customRole, setCustomRole] = useState("");
   const [isOtherRole, setIsOtherRole] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<string>("behavioral");
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [credits, setCredits] = useState<number>(0);
   const [starting, setStarting] = useState(false);
