@@ -1,112 +1,120 @@
 
 
-## Plan: Make the Interview Genuinely Conversational
+## Plan: Make the Interview Truly Real — Gap Analysis & Enhancements
 
-### The Problem
+### Honest Assessment: Where It Stands Now
 
-Right now the flow is:
-1. Pre-generate 6-8 questions → store in `interviews.question_bank`
-2. Feed those exact questions as a numbered list into the Realtime agent's system prompt: *"ask these questions one by one"*
-3. Agent reads the script
+The foundation is solid — conversational prompting, adaptive difficulty, persona, lobby, debrief. But here's what still makes it feel "AI tool" vs "real interview":
 
-This is a **teleprompter, not an interviewer**. A real interviewer adapts — they dig deeper when an answer is interesting, skip questions when the candidate already covered them, and the conversation flows naturally.
+**Current Reality Score: 6/10**
 
-### The Fix
+What's missing is not more prompting — it's **sensory and behavioral realism**. A real interview has texture: you see yourself on camera, you hear typing, the interviewer pauses to think, they push back, and you get real-time awareness of your own performance.
 
-**Stop feeding a script. Give the agent context and let it think.**
+### The 5 Enhancements That Close the Gap
 
-Instead of a numbered question list, the system prompt should describe:
-- The role, level, and what skills/competencies matter
-- The candidate's CV summary (already parsed)
-- Interview guidelines (how many topics to cover, time budget, depth expectations)
-- Evaluation criteria (what to probe for)
+---
 
-The agent then **generates its own questions in real-time** based on what the candidate actually says. This is what OpenAI Realtime is designed for — it's a reasoning model, not a text-to-speech reader.
+### 1. Webcam Self-View (Like Zoom)
 
-### Technical Changes
+Show the candidate their own camera feed in a small circle (bottom-right), exactly like a video call. The interviewer stays avatar-only (no deepfake needed), but seeing yourself creates interview psychology — you sit up straighter, you're more aware of your presentation.
 
-**File: `supabase/functions/realtime-session-token/index.ts`**
+**File:** `src/pages/interview/LiveInterview.tsx`
+- Add a `<video>` element using the existing microphone `MediaStream` (request video too)
+- Small 120x120 circle, bottom-right, with border glow
+- Toggle to hide/show
 
-Replace the current instructions that list questions with a **role briefing** prompt:
+---
 
+### 2. Real-Time Speech Analytics (Filler Word Counter + Pace Tracker)
+
+Parse the user's transcript entries in real-time to count filler words ("um", "uh", "like", "you know", "basically", "actually") and measure words-per-minute. Show a subtle, non-distracting indicator on screen — a small bar that turns amber if pace is too fast or filler count is climbing.
+
+This is the feature that actually **improves skills**. Candidates become self-aware of their speech habits.
+
+**Files:**
+- `src/hooks/useSpeechAnalytics.ts` — New hook that processes `conversationLog` entries in real-time
+- `src/pages/interview/LiveInterview.tsx` — Add a minimal analytics bar (filler count + pace indicator)
+- `supabase/functions/generate-report/index.ts` — Include speech analytics data in the report
+
+---
+
+### 3. Interviewer "Thinking" Pauses + Note-Taking Sounds
+
+Real interviewers don't respond instantly. They pause, say "hmm", type notes. Right now the AI responds the millisecond the candidate stops speaking.
+
+**File:** `src/hooks/useRealtimeInterview.ts`
+- After user finishes speaking (`conversation.item.input_audio_transcription.completed`), show a "Taking notes..." state for 1-2 seconds before the AI response plays
+- Play subtle keyboard typing sounds during this pause (small audio file)
+
+**File:** `src/pages/interview/LiveInterview.tsx`
+- Add a "Taking notes..." status below the avatar (between "Listening" and "Speaking")
+
+---
+
+### 4. Pushback & Challenge Behavior in the Agent
+
+Real interviewers don't just accept answers — they challenge. "I'm not sure I agree with that approach", "What if the client pushed back?", "Play devil's advocate for me." This is missing from the system prompt.
+
+**File:** `supabase/functions/realtime-session-token/index.ts`
+- Add to the system prompt:
 ```
-You are [Persona Name], [Title] at [Company], conducting a live interview 
-for a [Level] [Role] position.
-
-CANDIDATE CONTEXT:
-- Name: [name]
-- CV highlights: [parsed CV summary — key skills, experience, notable projects]
-
-YOUR INTERVIEW APPROACH:
-- Start with a warm intro and an easy icebreaker about their background
-- Cover 5-6 topics across: technical depth, problem-solving, collaboration, 
-  leadership (if senior+), and motivation
-- Listen actively — when something interesting comes up, dig deeper with 
-  follow-ups. Don't just move to the next topic mechanically
-- If the candidate mentions a project or challenge, ask specifics: 
-  "What was your role?", "What would you do differently?"
-- Adapt difficulty based on their responses — if they handle something 
-  easily, push harder. If they struggle, pivot gracefully
-- Keep the conversation natural. Use transitions like "That reminds me..." 
-  or "Building on that..."
-- You have about 15 minutes. Manage time naturally — don't rush, 
-  but don't let one topic consume the whole session
-- End by asking if they have questions, then close warmly
-
-RULES:
-- Never list multiple questions at once
-- Never say "next question" or "moving on to question 3"
-- React genuinely to answers before asking the next thing
-- If an answer is vague, probe: "Can you give me a specific example?"
-- Never evaluate or score answers during the conversation
-```
-
-**File: `supabase/functions/generate-question-bank/index.ts`**
-
-Repurpose this function. Instead of generating exact questions, generate a **topic guide** — a set of competency areas and evaluation signals the agent should explore. This still gets stored in `interviews.question_bank` but serves as a reference for the system prompt, not a script.
-
-The output structure changes from:
-```json
-{ "opening": "...", "questions": [...], "closing": "..." }
-```
-to:
-```json
-{
-  "competencies": [
-    {
-      "area": "System Design",
-      "why": "Critical for senior backend roles",
-      "signals_to_look_for": ["trade-off reasoning", "scalability awareness"],
-      "red_flags": ["no mention of constraints", "textbook answers only"]
-    }
-  ],
-  "candidate_highlights": ["Led migration at X Corp", "Open source contributor to Y"],
-  "suggested_icebreaker": "I saw you worked on the migration at X Corp — tell me about that"
-}
+CHALLENGE BEHAVIOR:
+- After every 2-3 answers, gently push back on one point: 
+  "Interesting, but what if [alternative]?", "I'd challenge that — 
+  what about [edge case]?"
+- If the candidate gives a textbook answer, say: "That's the standard 
+  approach. What would YOU do differently?"
+- Occasionally play devil's advocate: "Let me push back on that..."
+- Use strategic silence — after an answer, wait 2-3 seconds before 
+  responding. The candidate will often add more depth unprompted.
+- Never be hostile. Be professionally skeptical, like a senior 
+  colleague stress-testing an idea.
 ```
 
-**File: `src/pages/interview/LiveInterview.tsx`**
+---
 
-- Remove any logic that depends on `question_bank.questions.length` for progress tracking
-- The lobby phase still calls `generate-question-bank` (now generates topic guide) and `pre-interview-coach`
-- Everything else stays the same — the Realtime connection, barge-in, captions, persona display
+### 5. Interview Type Selection (Behavioral / Technical / Case Study / Stress)
 
-### What This Changes for the Candidate
+Currently all interviews are the same format. Real companies use different styles. Let the candidate choose:
 
-| Before | After |
-|--------|-------|
-| AI asks Q1, waits, asks Q2, waits... | AI responds to what you say and explores organically |
-| Same 6 questions every time for same role | Different conversation every time based on your answers |
-| "Moving on to the next question" | "That's interesting — tell me more about the scaling challenge" |
-| Feels like a quiz | Feels like talking to a senior hiring manager |
+- **Behavioral**: STAR method, past experiences, leadership stories
+- **Technical**: Deep domain knowledge, problem-solving, system design
+- **Case Study**: Given a scenario, walk through analysis and recommendation
+- **Stress**: Rapid-fire questions, time pressure, curveball questions, interruptions
+
+Each type changes the system prompt personality and approach.
+
+**Files:**
+- `src/pages/interview/NewInterview.tsx` — Add step 3: interview type selection
+- `interviews` table — Add `interview_type` column via migration
+- `supabase/functions/realtime-session-token/index.ts` — Switch prompt personality based on type
+- `supabase/functions/generate-question-bank/index.ts` — Adjust topic guide structure per type
+
+---
 
 ### Changes Summary
 
 | File | Change |
 |------|--------|
-| `supabase/functions/realtime-session-token/index.ts` | Replace scripted question list with conversational role briefing + CV context + competency areas |
-| `supabase/functions/generate-question-bank/index.ts` | Generate competency topic guide instead of literal questions |
-| `src/pages/interview/LiveInterview.tsx` | Minor — remove any question-count-based progress logic |
+| `src/pages/interview/LiveInterview.tsx` | Add webcam self-view, speech analytics bar, "taking notes" state |
+| `src/hooks/useSpeechAnalytics.ts` | New — real-time filler word + pace tracking hook |
+| `src/hooks/useRealtimeInterview.ts` | Add thinking pause delay + note-taking sound |
+| `supabase/functions/realtime-session-token/index.ts` | Add pushback/challenge behavior + interview type prompt variants |
+| `supabase/functions/generate-question-bank/index.ts` | Adjust topic guide per interview type |
+| `src/pages/interview/NewInterview.tsx` | Add interview type selection step |
+| DB migration | Add `interview_type` column to `interviews` table |
 
-No database schema changes needed. The `question_bank` column (jsonb) stores the new format without migration.
+### Priority Order
+
+1. **Pushback behavior** (prompt change only, highest impact)
+2. **Speech analytics** (the skill-building differentiator)
+3. **Webcam self-view** (instant realism boost)
+4. **Thinking pauses** (subtle but powerful)
+5. **Interview types** (variety and replay value)
+
+### What This Gets You
+
+**Reality Score: 6/10 → 9/10**
+
+The combination of seeing yourself, hearing "note-taking", getting challenged, tracking your own filler words, and choosing interview styles makes this feel like a real prep session with a demanding hiring manager — not a chatbot reading questions.
 
