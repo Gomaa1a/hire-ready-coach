@@ -107,7 +107,8 @@ const NewInterview = () => {
         level: selectedLevel,
         status: "active",
         cv_url: cvUrl,
-      })
+        interview_type: selectedType,
+      } as any)
       .select()
       .single();
 
