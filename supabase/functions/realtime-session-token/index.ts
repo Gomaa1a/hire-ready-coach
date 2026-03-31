@@ -140,6 +140,20 @@ serve(async (req) => {
       ? `\nDIFFICULTY CALIBRATION:\n- Easy: ${guide.difficulty_escalation.level_3_easy}\n- Medium: ${guide.difficulty_escalation.level_5_medium}\n- Hard: ${guide.difficulty_escalation.level_7_hard}\n- Expert: ${guide.difficulty_escalation.level_10_extreme}\n`
       : "";
 
+    // Determine if Arabic assessment is relevant based on the role
+    const arabicRelevantRoles = [
+      "teacher", "معلم", "customer service", "خدمة عملاء", "sales", "مبيعات",
+      "receptionist", "hr", "human resources", "موارد بشرية", "public relations",
+      "marketing", "تسويق", "journalist", "صحفي", "lawyer", "محامي", "doctor",
+      "طبيب", "nurse", "ممرض", "pharmacist", "صيدلي", "social worker",
+      "government", "حكومي", "admin", "إداري", "accountant", "محاسب",
+      "translator", "مترجم", "call center", "مركز اتصال", "retail", "تجزئة",
+      "hospitality", "ضيافة", "real estate", "عقارات", "banking", "بنك",
+      "insurance", "تأمين", "education", "تعليم", "healthcare", "رعاية صحية",
+    ];
+    const roleLower = interview.role.toLowerCase();
+    const needsArabic = arabicRelevantRoles.some(r => roleLower.includes(r));
+
     const instructions = `You are ${personaName}, ${personaTitle} at ${personaCompany}. You are conducting a live voice interview for a ${interview.level} ${interview.role} position.
 
 The candidate's name is ${candidateName}. Address them as "${firstName}" naturally throughout the conversation.
@@ -192,15 +206,16 @@ SESSION MANAGEMENT:
 - NEVER end the interview early because you "ran out of questions"
 - If you've covered all planned areas and time remains, go deeper into the candidate's strongest or weakest area
 
-ARABIC LANGUAGE ASSESSMENT:
-- At some point during the interview (after 2-3 questions in English), naturally transition to Arabic
-- Say something like: "By the way, since this role involves working with Arabic-speaking stakeholders, I'd like to hear your thoughts in Arabic. Could you answer the next question in Arabic?"
-- Ask the question in Arabic yourself, and expect the candidate to respond in Arabic
-- You MUST understand and process their Arabic response fully
-- After they respond in Arabic, acknowledge their answer naturally (you can respond in Arabic or English) and continue the interview
-- If the candidate struggles with Arabic, smoothly switch back to English — do not penalize them
-- This tests bilingual communication ability in a natural, non-forced way
-- You can sprinkle 1-2 more Arabic exchanges later if the candidate was comfortable
+${needsArabic ? `ARABIC LANGUAGE ASSESSMENT:
+- This role requires Arabic communication skills. You MUST test the candidate's Arabic ability.
+- After 2-3 questions in English, naturally ask the candidate to answer in Arabic: "Since this role involves working with Arabic-speaking clients/stakeholders, I'd like to hear your thoughts in Arabic for the next question."
+- You continue speaking in English — the candidate responds in Arabic
+- You MUST fully understand and process their Arabic response before continuing
+- If they answer well in Arabic, ask 1-2 more questions where they respond in Arabic throughout the interview
+- If the candidate struggles with Arabic, smoothly switch back to English — note it but don't penalize harshly
+- This tests real bilingual workplace communication ability` : `LANGUAGE:
+- This is an English-only interview. Conduct the entire interview in English.
+- Do NOT ask the candidate to speak in any other language.`}
 
 CRITICAL RULES:
 - NEVER list multiple questions at once
