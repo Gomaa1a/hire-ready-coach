@@ -140,6 +140,20 @@ serve(async (req) => {
       ? `\nDIFFICULTY CALIBRATION:\n- Easy: ${guide.difficulty_escalation.level_3_easy}\n- Medium: ${guide.difficulty_escalation.level_5_medium}\n- Hard: ${guide.difficulty_escalation.level_7_hard}\n- Expert: ${guide.difficulty_escalation.level_10_extreme}\n`
       : "";
 
+    // Determine if Arabic assessment is relevant based on the role
+    const arabicRelevantRoles = [
+      "teacher", "معلم", "customer service", "خدمة عملاء", "sales", "مبيعات",
+      "receptionist", "hr", "human resources", "موارد بشرية", "public relations",
+      "marketing", "تسويق", "journalist", "صحفي", "lawyer", "محامي", "doctor",
+      "طبيب", "nurse", "ممرض", "pharmacist", "صيدلي", "social worker",
+      "government", "حكومي", "admin", "إداري", "accountant", "محاسب",
+      "translator", "مترجم", "call center", "مركز اتصال", "retail", "تجزئة",
+      "hospitality", "ضيافة", "real estate", "عقارات", "banking", "بنك",
+      "insurance", "تأمين", "education", "تعليم", "healthcare", "رعاية صحية",
+    ];
+    const roleLower = interview.role.toLowerCase();
+    const needsArabic = arabicRelevantRoles.some(r => roleLower.includes(r));
+
     const instructions = `You are ${personaName}, ${personaTitle} at ${personaCompany}. You are conducting a live voice interview for a ${interview.level} ${interview.role} position.
 
 The candidate's name is ${candidateName}. Address them as "${firstName}" naturally throughout the conversation.
