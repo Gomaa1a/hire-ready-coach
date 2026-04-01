@@ -332,6 +332,13 @@ export type Database = {
             referencedRelation: "promo_codes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "referral_signups_promo_code_id_fkey"
+            columns: ["promo_code_id"]
+            isOneToOne: false
+            referencedRelation: "public_promo_codes"
+            referencedColumns: ["id"]
+          },
         ]
       }
       reports: {
@@ -426,8 +433,30 @@ export type Database = {
         }
         Relationships: []
       }
+      public_promo_codes: {
+        Row: {
+          code: string | null
+          discount_percent: number | null
+          id: string | null
+          is_active: boolean | null
+        }
+        Insert: {
+          code?: string | null
+          discount_percent?: number | null
+          id?: string | null
+          is_active?: boolean | null
+        }
+        Update: {
+          code?: string | null
+          discount_percent?: number | null
+          id?: string | null
+          is_active?: boolean | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      deduct_credit: { Args: never; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
