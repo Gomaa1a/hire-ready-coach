@@ -87,13 +87,10 @@ const NewInterview = () => {
       cvUrl = filePath;
     }
 
-    // Deduct credit
-    const { error: creditError } = await supabase
-      .from("credits")
-      .update({ balance: credits - 1, updated_at: new Date().toISOString() })
-      .eq("user_id", user.id);
-    if (creditError) {
-      toast.error("Failed to deduct credit");
+    // Deduct credit via secure server-side function
+    const { data: deducted, error: creditError } = await supabase.rpc("deduct_credit");
+    if (creditError || !deducted) {
+      toast.error("Failed to deduct credit — insufficient balance");
       setStarting(false);
       return;
     }

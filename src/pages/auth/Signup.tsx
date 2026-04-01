@@ -18,7 +18,7 @@ const Signup = () => {
   const validateAndGetPromo = async (code: string) => {
     if (!code.trim()) return null;
     const { data, error } = await supabase
-      .from("promo_codes")
+      .from("public_promo_codes" as any)
       .select("id, code, discount_percent")
       .eq("code", code.trim().toUpperCase())
       .eq("is_active", true)
