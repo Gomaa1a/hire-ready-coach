@@ -21,8 +21,7 @@ const Signup = () => {
       _code: code.trim(),
     });
     if (error || !data || data.length === 0) return null;
-    const match = data[0];
-    return data;
+    return data[0];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
