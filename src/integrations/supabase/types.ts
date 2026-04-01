@@ -332,13 +332,6 @@ export type Database = {
             referencedRelation: "promo_codes"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "referral_signups_promo_code_id_fkey"
-            columns: ["promo_code_id"]
-            isOneToOne: false
-            referencedRelation: "public_promo_codes"
-            referencedColumns: ["id"]
-          },
         ]
       }
       reports: {
@@ -433,27 +426,6 @@ export type Database = {
         }
         Relationships: []
       }
-      public_promo_codes: {
-        Row: {
-          code: string | null
-          discount_percent: number | null
-          id: string | null
-          is_active: boolean | null
-        }
-        Insert: {
-          code?: string | null
-          discount_percent?: number | null
-          id?: string | null
-          is_active?: boolean | null
-        }
-        Update: {
-          code?: string | null
-          discount_percent?: number | null
-          id?: string | null
-          is_active?: boolean | null
-        }
-        Relationships: []
-      }
     }
     Functions: {
       deduct_credit: { Args: never; Returns: boolean }
@@ -463,6 +435,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      lookup_promo_code: {
+        Args: { _code: string }
+        Returns: {
+          code: string
+          discount_percent: number
+          id: string
+          is_active: boolean
+        }[]
       }
       owns_interview: { Args: { _interview_id: string }; Returns: boolean }
     }
