@@ -17,14 +17,11 @@ const Signup = () => {
 
   const validateAndGetPromo = async (code: string) => {
     if (!code.trim()) return null;
-    const { data, error } = await supabase
-      .from("public_promo_codes" as any)
-      .select("id, code, discount_percent")
-      .eq("code", code.trim().toUpperCase())
-      .eq("is_active", true)
-      .maybeSingle();
-    if (error || !data) return null;
-    return data;
+    const { data, error } = await supabase.rpc("lookup_promo_code", {
+      _code: code.trim(),
+    });
+    if (error || !data || data.length === 0) return null;
+    return data[0];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
