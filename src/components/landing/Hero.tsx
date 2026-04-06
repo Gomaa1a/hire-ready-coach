@@ -37,9 +37,15 @@ const Hero = () => {
           <div className="mb-6">
             <LiveStatsBar />
           </div>
-          <div className="flex flex-wrap gap-4">
-            <Link to="/auth/signup" className="neo-btn bg-primary text-primary-foreground text-base">
-              Start for Free
+          <div className="flex flex-wrap items-center gap-4">
+            <Link
+              to="/auth/signup"
+              className="neo-btn bg-primary text-primary-foreground text-lg px-8 py-4 shadow-[6px_6px_0_0_hsl(var(--ink))] hover:shadow-[2px_2px_0_0_hsl(var(--ink))] hover:translate-x-1 hover:translate-y-1 transition-all animate-pulse-slow relative overflow-hidden group"
+            >
+              <span className="absolute inset-0 bg-lime/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+              <span className="relative z-10 flex items-center gap-2 font-extrabold">
+                🎯 Start Your Free Interview
+              </span>
             </Link>
             <a href="#how-it-works" className="neo-btn bg-background text-foreground text-base">
               See how it works
