@@ -110,11 +110,21 @@ const Dashboard = () => {
       </nav>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="mb-2 font-heading text-3xl font-extrabold">Hey there 👋</h1>
-          <p className="text-muted-foreground">
-            You have <span className="font-bold text-primary">{credits} interviews</span> remaining.
-          </p>
+        {/* Focal CTA */}
+        <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="mb-1 font-heading text-3xl font-extrabold">Hey there 👋</h1>
+            <p className="text-muted-foreground">
+              You have <span className="font-bold text-primary">{credits} interviews</span> remaining.
+            </p>
+          </div>
+          <Link
+            to="/interview/new"
+            className="neo-btn bg-primary text-primary-foreground text-lg px-8 py-4 shadow-[6px_6px_0_0_hsl(var(--ink))] hover:shadow-[2px_2px_0_0_hsl(var(--ink))] hover:translate-x-1 hover:translate-y-1 transition-all animate-pulse-slow flex items-center gap-2 font-extrabold"
+          >
+            <Mic className="h-5 w-5" />
+            New Interview
+          </Link>
         </div>
 
         <div className="mb-8 grid gap-4 sm:grid-cols-3">
