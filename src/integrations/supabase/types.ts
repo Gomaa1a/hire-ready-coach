@@ -347,6 +347,8 @@ export type Database = {
           market_insights: Json | null
           overall_score: number | null
           roadmap: Json | null
+          role_requirements: Json | null
+          scoring_rubric: Json | null
           strengths: Json | null
           struct_score: number | null
           tech_score: number | null
@@ -365,6 +367,8 @@ export type Database = {
           market_insights?: Json | null
           overall_score?: number | null
           roadmap?: Json | null
+          role_requirements?: Json | null
+          scoring_rubric?: Json | null
           strengths?: Json | null
           struct_score?: number | null
           tech_score?: number | null
@@ -383,6 +387,8 @@ export type Database = {
           market_insights?: Json | null
           overall_score?: number | null
           roadmap?: Json | null
+          role_requirements?: Json | null
+          scoring_rubric?: Json | null
           strengths?: Json | null
           struct_score?: number | null
           tech_score?: number | null
