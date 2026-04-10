@@ -1,116 +1,70 @@
 
 
-## Plan: Brutally Honest Scoring Engine with Role-Specific Benchmarks & References
+## Plan: Multi-Layer Noise Rejection for Voice Agent
 
-### The Problem
+### Root Cause
 
-The current system has three fundamental flaws:
+The current approach relies only on two things: (1) a system prompt telling the AI to "ignore noise" and (2) OpenAI's server-side VAD threshold at 0.7. This is insufficient because:
 
-1. **Generic scoring** — The report evaluator doesn't have real job requirements to score against. A candidate who talks about "teamwork" gets strength points even if the role needs deep system design skills.
-2. **Inflated scores** — There's no instruction to give 0s or low scores when deserved. The AI defaults to "nice feedback" mode.
-3. **No references** — Market insights, salary data, skills lists, and feedback have no citations. The user has no way to verify anything.
+- **VAD still triggers** on loud coughs, door slams, or nearby speech — threshold 0.7 isn't high enough for noisy environments
+- **Whisper still transcribes noise** — even if VAD triggers on a cough, Whisper produces a transcription like "Hmm" or "Yeah" or gibberish, and the model responds to it
+- **No client-side filtering** — every transcription, no matter how short or incoherent, gets saved to the conversation log and DB, polluting the transcript
 
-### Architecture: 3-Step Pipeline
-
-The current `generate-report` function runs 2 AI calls. We'll restructure to 3 calls with strict grading rubrics:
-
-```text
-Step 1: Role Research Agent (NEW — deep job requirements)
-   ↓
-Step 2: Market Insights Agent (EXISTS — enhanced with sources)
-   ↓
-Step 3: Strict Evaluator Agent (EXISTS — completely rewritten)
-```
+We need a **3-layer defense**: client-side audio processing → stricter VAD → client-side transcript filtering.
 
 ### Changes
 
-#### 1. `supabase/functions/generate-report/index.ts` — Major Rewrite
+#### 1. Client-Side Audio Noise Gate (`src/hooks/useRealtimeInterview.ts`)
 
-**Step 1 — Role Research Agent (new)**
+Before sending microphone audio to WebRTC, run it through a Web Audio API processing chain:
 
-A dedicated AI call that produces a structured "job requirements profile" for the exact role+level. This becomes the scoring rubric:
+- **Noise gate via `createDynamicsCompressor`** — suppress audio below a volume threshold so quiet background sounds never reach OpenAI
+- **High-pass filter at 85Hz** — remove low-frequency rumble (AC units, traffic, fans)
+- **The processed stream** replaces the raw mic stream on the PeerConnection
 
-- **Must-have skills**: 6-8 non-negotiable skills for this specific role (e.g., "System Design" for Senior Backend Engineer, NOT "Communication")
-- **Nice-to-have skills**: 4-5 bonus skills
-- **Expected competencies by level**: What a Junior vs Senior vs Lead should demonstrate
-- **Industry benchmarks**: What top performers in this role actually do
-- **Sources/references**: For each skill and benchmark, cite where this comes from (e.g., "Based on Google/Meta/Amazon job postings", "Per LinkedIn 2025 Skills Report", "Industry standard per IEEE/PMI/SHRM")
+This means OpenAI never even *hears* quiet background noise.
 
-This output is saved alongside the report so the user can see WHY each skill matters.
+#### 2. Increase VAD Threshold & Eagerness (`supabase/functions/realtime-session-token/index.ts`)
 
-**Step 2 — Market Insights (enhanced)**
+- `threshold`: 0.7 → **0.85** (only clear, loud speech triggers)
+- `silence_duration_ms`: 1000 → **1200** (waits longer to confirm user stopped)
+- `prefix_padding_ms`: 400 → **500** (captures more lead-in, reducing false starts)
 
-Add a `sources` array to every data point:
-- Salary ranges → cite source (e.g., "Glassdoor 2025 data", "Levels.fyi")
-- Top skills → cite where they're in demand
-- Hiring trends → cite industry reports
-- Companies → cite job board data
+#### 3. Client-Side Transcript Filtering (`src/hooks/useRealtimeInterview.ts`)
 
-**Step 3 — Strict Evaluator (complete rewrite)**
+When a user transcription arrives (`conversation.item.input_audio_transcription.completed`), filter it before adding to the conversation:
 
-The evaluator receives:
-- The role requirements profile from Step 1
-- The interview transcript
-- The candidate's CV context
+- **Discard if fewer than 3 words** — single words like "Hmm", "Uh", cough transcriptions get dropped
+- **Discard if it matches a noise pattern** — regex for common noise transcriptions: "hmm", "uh huh", "mm", "yeah", "(laughing)", "(coughing)", "[inaudible]", etc.
+- **Only save clean, intentional speech** to the conversation log and database
 
-New scoring instructions:
-- **Only count strengths that directly map to must-have or nice-to-have skills for this role**. If the candidate mentioned "great teamwork" but the role needs "distributed systems design", that is NOT a strength.
-- **Score 0 when deserved.** If the candidate showed zero evidence of a required competency, the score for that area is 0. Not 20, not 10. Zero.
-- **Every strength must include**: what the candidate said (quote), which job requirement it maps to, and why it matters for this role
-- **Every weakness must include**: what was expected, what the candidate actually said (or failed to say), and a specific reference to the role requirement
-- **Overall score formula**: weighted average where must-have skills count 3x and nice-to-have count 1x
-- **Feedback must be brutally honest**: "You scored 12% on technical depth. For a Senior Engineer role, this is significantly below the expected bar. You could not explain [X] which is a fundamental requirement per industry standards."
+#### 4. Reinforce Prompt with Explicit Ignore List (`supabase/functions/realtime-session-token/index.ts`)
 
-#### 2. Database Migration — Add references columns
+Add an explicit list of transcriptions to never respond to:
 
-Add to `reports` table:
-- `role_requirements` (jsonb) — The role research output with sources
-- `scoring_rubric` (jsonb) — The exact criteria used to score, so the user sees transparency
-
-#### 3. `src/pages/Report.tsx` — Display References
-
-New sections in the report UI:
-- **"How We Scored You"** section showing the role requirements profile and why each competency was evaluated
-- **References panel** on market insights showing source citations
-- **Strength/weakness cards** enhanced to show which job requirement each maps to
-- Score colors extended: scores below 20 get a "critical" red treatment
-
-### Scoring Rubric Example
-
-For a "Senior Software Engineer" role:
-
-```text
-Must-have (3x weight):
-- System Design [Source: FAANG job postings 2025]
-- Data Structures & Algorithms [Source: Industry standard]
-- Code Quality & Testing [Source: Google Engineering Practices]
-- Problem Decomposition [Source: Staff+ Engineering expectations]
-
-Nice-to-have (1x weight):
-- Leadership & Mentoring
-- Cross-team Communication
-- Domain Expertise
-
-If candidate shows 0 evidence of System Design → tech_score component = 0
-If candidate talks about "teamwork" but can't explain a technical trade-off → that's NOT a strength
+```
+TRANSCRIPTIONS TO SILENTLY IGNORE (do NOT respond, do NOT acknowledge):
+- Single words: "Hmm", "Uh", "Mm", "Yeah", "Ok", "Ah"
+- Sound descriptions: "(laughing)", "(coughing)", "[inaudible]", "(background noise)"
+- Fragments under 3 words that don't form a question or statement
+- Any text that appears to be someone else speaking in the background
+If you're unsure whether the candidate is speaking to you, WAIT silently. Do NOT say "Could you repeat that?" or "I didn't catch that."
 ```
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-report/index.ts` | Add Role Research Agent (Step 1), enhance Market Insights with sources, rewrite Evaluator with strict rubric |
-| DB Migration | Add `role_requirements` and `scoring_rubric` jsonb columns to `reports` |
-| `src/pages/Report.tsx` | Add "How We Scored You" section, reference citations on insights, enhanced strength/weakness cards with requirement mapping |
-| `src/integrations/supabase/types.ts` | Auto-updated after migration |
+| `src/hooks/useRealtimeInterview.ts` | Add Web Audio noise gate + high-pass filter before WebRTC; add transcript filtering logic to discard noise transcriptions |
+| `supabase/functions/realtime-session-token/index.ts` | Raise VAD to 0.85/1200ms/500ms; add explicit ignore list to prompt |
 
 ### What This Achieves
 
-| Before | After |
-|--------|-------|
-| Generic strengths ("good communicator") | Role-specific strengths ("demonstrated system design thinking per Senior Engineer requirements") |
-| Inflated scores (nobody gets below 40) | Honest scores (0 if no evidence shown) |
-| No references | Every claim cited with source |
-| Same rubric for all roles | Custom rubric per role+level |
-| "You did great!" feedback | "You scored 12% on technical depth. Here's exactly why." |
+| Layer | What It Blocks |
+|-------|---------------|
+| Audio noise gate (client) | Quiet sounds never reach OpenAI — fans, typing, distant speech |
+| High-pass filter (client) | Low rumble from AC, traffic, vibrations |
+| Higher VAD threshold (server) | Medium-volume sounds like coughs, door closing |
+| Transcript filter (client) | Even if Whisper transcribes noise, short/gibberish text is discarded |
+| Prompt ignore list (server) | Last resort — model explicitly told to ignore specific patterns |
 
