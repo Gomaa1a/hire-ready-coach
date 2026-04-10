@@ -1,6 +1,26 @@
 import { useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+// Noise transcript filter — discards transcriptions that are clearly background noise
+const NOISE_PATTERNS = /^(hmm|uh|um|mm|mhm|uh-huh|huh|oh|ah|yeah|ok|okay|hm+|u+h+|m+|uh uh|mm mm|hmm hmm|\(.*\)|\[.*\])$/i;
+
+function isNoiseTranscription(text: string): boolean {
+  const trimmed = text.trim();
+  // Discard empty
+  if (!trimmed) return true;
+  // Discard if fewer than 3 words
+  const words = trimmed.split(/\s+/);
+  if (words.length < 3) {
+    // Check if every word matches noise pattern
+    if (words.every(w => NOISE_PATTERNS.test(w))) return true;
+    // Single/double word fragments that aren't real speech
+    if (words.length === 1 && trimmed.length < 5) return true;
+  }
+  // Check entire string against noise patterns
+  if (NOISE_PATTERNS.test(trimmed)) return true;
+  return false;
+}
+
 export type ConversationEntry = {
   role: "user" | "assistant";
   text: string;
