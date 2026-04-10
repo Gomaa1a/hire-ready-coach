@@ -386,19 +386,19 @@ const LiveInterview = () => {
             <p className="mt-2 text-sm text-white/50">Great work! Let's see how you did.</p>
           </div>
 
-          <div className="flex items-center gap-8">
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8">
             <div className="text-center">
-              <p className="text-2xl font-bold text-white tabular-nums">{getInterviewDuration()}</p>
+              <p className="text-xl sm:text-2xl font-bold text-white tabular-nums">{getInterviewDuration()}</p>
               <p className="text-xs text-white/40 mt-1">Duration</p>
             </div>
             <div className="h-8 w-px bg-white/10" />
             <div className="text-center">
-              <p className="text-2xl font-bold text-white tabular-nums">{topicsDiscussed}</p>
+              <p className="text-xl sm:text-2xl font-bold text-white tabular-nums">{topicsDiscussed}</p>
               <p className="text-xs text-white/40 mt-1">Responses</p>
             </div>
             <div className="h-8 w-px bg-white/10" />
             <div className="text-center">
-              <p className={`text-2xl font-bold tabular-nums ${analytics.fillerRate === "high" ? "text-red-400" : analytics.fillerRate === "moderate" ? "text-amber-400" : "text-green-400"}`}>
+              <p className={`text-xl sm:text-2xl font-bold tabular-nums ${analytics.fillerRate === "high" ? "text-red-400" : analytics.fillerRate === "moderate" ? "text-amber-400" : "text-green-400"}`}>
                 {analytics.fillerCount}
               </p>
               <p className="text-xs text-white/40 mt-1">Fillers</p>
@@ -418,32 +418,32 @@ const LiveInterview = () => {
   return (
     <div className="relative flex h-screen flex-col bg-[#0a0a0a] overflow-hidden">
       {/* Top overlay */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-3">
-        <div className="flex items-center gap-3">
+      <div className="absolute top-0 left-0 right-0 z-20 flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-5 sm:py-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          <span className={`text-lg font-bold tabular-nums ${timerColor}`}>
+          <span className={`text-base sm:text-lg font-bold tabular-nums ${timerColor}`}>
             {formatTime(timeLeft)}
           </span>
         </div>
 
-        {/* Speech analytics bar */}
-        {analytics.totalWords > 10 && (
-          <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${fillerColor}`}>
-              {analytics.fillerRate === "high" && <AlertTriangle className="h-3 w-3" />}
-              {analytics.fillerCount} fillers
-            </div>
-            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${paceColor}`}>
-              {analytics.wordsPerMinute} wpm
-            </div>
+        {interviewData && (
+          <div className="flex items-center gap-2 rounded-full bg-white/5 backdrop-blur-sm px-2 py-1 sm:px-3 sm:py-1.5 order-2 sm:order-3">
+            <span className="text-[10px] sm:text-xs font-medium text-white/70 truncate max-w-[100px] sm:max-w-none">
+              {interviewData.role}
+            </span>
           </div>
         )}
 
-        {interviewData && (
-          <div className="flex items-center gap-2 rounded-full bg-white/5 backdrop-blur-sm px-3 py-1.5">
-            <span className="text-xs font-medium text-white/70">
-              {interviewData.role}
-            </span>
+        {/* Speech analytics bar */}
+        {analytics.totalWords > 10 && (
+          <div className="flex items-center gap-1.5 sm:gap-2 order-3 sm:order-2 w-full sm:w-auto justify-center">
+            <div className={`flex items-center gap-1 sm:gap-1.5 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[10px] font-semibold ${fillerColor}`}>
+              {analytics.fillerRate === "high" && <AlertTriangle className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
+              {analytics.fillerCount} fillers
+            </div>
+            <div className={`flex items-center gap-1 sm:gap-1.5 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[10px] font-semibold ${paceColor}`}>
+              {analytics.wordsPerMinute} wpm
+            </div>
           </div>
         )}
       </div>
@@ -466,7 +466,7 @@ const LiveInterview = () => {
             )}
 
             <div
-              className={`relative flex h-36 w-36 items-center justify-center rounded-full transition-all duration-500 ${
+              className={`relative flex h-24 w-24 sm:h-36 sm:w-36 items-center justify-center rounded-full transition-all duration-500 ${
                 isAISpeaking
                   ? "bg-blue-500/20 ring-2 ring-blue-500/60 shadow-[0_0_60px_rgba(59,130,246,0.3)]"
                   : isTakingNotes
@@ -475,9 +475,9 @@ const LiveInterview = () => {
               }`}
             >
               {persona ? (
-                <span className="text-3xl font-bold text-white/60">{persona.initials}</span>
+                <span className="text-2xl sm:text-3xl font-bold text-white/60">{persona.initials}</span>
               ) : (
-                <User className="h-16 w-16 text-white/50" />
+                <User className="h-10 w-10 sm:h-16 sm:w-16 text-white/50" />
               )}
 
               {isAISpeaking && (
@@ -514,14 +514,14 @@ const LiveInterview = () => {
 
       {/* Webcam self-view (bottom-right) */}
       {showWebcam && phase === "active" && (
-        <div className="absolute bottom-24 right-5 z-30">
+        <div className="absolute bottom-28 sm:bottom-24 right-3 sm:right-5 z-30">
           <div className="relative">
             <video
               ref={webcamRef}
               autoPlay
               muted
               playsInline
-              className="h-[120px] w-[120px] rounded-full object-cover border-2 border-white/20 shadow-lg shadow-black/50"
+              className="h-[80px] w-[80px] sm:h-[120px] sm:w-[120px] rounded-full object-cover border-2 border-white/20 shadow-lg shadow-black/50"
               style={{ transform: "scaleX(-1)" }}
             />
             <button
@@ -544,7 +544,7 @@ const LiveInterview = () => {
       {!showWebcam && phase === "active" && (
         <button
           onClick={() => setShowWebcam(true)}
-          className="absolute bottom-24 right-5 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/40 hover:text-white hover:bg-white/20 transition-all"
+          className="absolute bottom-28 sm:bottom-24 right-3 sm:right-5 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/40 hover:text-white hover:bg-white/20 transition-all"
         >
           <Video className="h-4 w-4" />
         </button>
@@ -552,7 +552,7 @@ const LiveInterview = () => {
 
       {/* Bottom: Transcript + Controls */}
       <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 pb-6">
-        <div className="mx-4 w-full max-w-xl max-h-32 overflow-y-auto">
+        <div className="mx-2 sm:mx-4 w-full max-w-xl max-h-24 sm:max-h-32 overflow-y-auto">
           {conversationLog.length > 0 ? (
             <div className="space-y-2 px-2">
               {conversationLog.slice(-4).map((entry, i) => (

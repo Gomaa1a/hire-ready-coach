@@ -364,10 +364,10 @@ const Report = () => {
         <div className="neo-card mb-8 bg-ink p-6 text-primary-foreground md:p-8">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
             <div className="text-center">
-              <div className={`font-heading text-7xl font-extrabold ${getGradeColor(grade)}`}>
+              <div className={`font-heading text-5xl sm:text-7xl font-extrabold ${getGradeColor(grade)}`}>
                 {grade}
               </div>
-              <div className="mt-2 font-heading text-3xl font-bold">{report.overall_score}%</div>
+              <div className="mt-2 font-heading text-2xl sm:text-3xl font-bold">{report.overall_score}%</div>
               <div className="text-sm text-foreground/60">Overall Score</div>
             </div>
             <div className="flex-1">
@@ -395,7 +395,7 @@ const Report = () => {
         </div>
 
         {/* Score mini-cards */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
           {Object.entries(scores).map(([key, value]) => (
             <div key={key} className={`neo-card p-4 text-center ${getScoreBg(value)}`}>
               <div className="text-2xl">{scoreEmojis[key]}</div>
