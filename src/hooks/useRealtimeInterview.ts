@@ -59,16 +59,47 @@ export function useRealtimeInterview() {
         audioEl.srcObject = e.streams[0];
       };
 
-      // 4. Add user microphone
-      const stream = await navigator.mediaDevices.getUserMedia({
+      // 4. Add user microphone with noise gate processing
+      const rawStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         },
       });
-      streamRef.current = stream;
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      // Build Web Audio processing chain: High-pass filter → Noise gate
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(rawStream);
+
+      // High-pass filter at 85Hz — removes low-frequency rumble (AC, fans, traffic)
+      const highpass = audioCtx.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.value = 85;
+      highpass.Q.value = 0.7;
+
+      // Noise gate via DynamicsCompressor — suppresses audio below threshold
+      const compressor = audioCtx.createDynamicsCompressor();
+      compressor.threshold.value = -45; // dB — sounds below this get compressed hard
+      compressor.knee.value = 5;
+      compressor.ratio.value = 20; // heavy compression = acts as gate
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.1;
+
+      // Additional gain to recover volume after compression
+      const makeupGain = audioCtx.createGain();
+      makeupGain.gain.value = 1.2;
+
+      // Connect chain: source → highpass → compressor → gain → destination
+      const destination = audioCtx.createMediaStreamDestination();
+      source.connect(highpass);
+      highpass.connect(compressor);
+      compressor.connect(makeupGain);
+      makeupGain.connect(destination);
+
+      const processedStream = destination.stream;
+      streamRef.current = rawStream; // keep raw stream ref for mute control
+      processedStream.getTracks().forEach((track) => pc.addTrack(track, processedStream));
 
       // 5. Create data channel for events
       const dc = pc.createDataChannel("oai-events");
@@ -159,11 +190,12 @@ export function useRealtimeInterview() {
         aiTranscriptRef.current = "";
         break;
 
-      case "conversation.item.input_audio_transcription.completed":
-        if (event.transcript?.trim()) {
+      case "conversation.item.input_audio_transcription.completed": {
+        const transcript = event.transcript?.trim();
+        if (transcript && !isNoiseTranscription(transcript)) {
           const entry: ConversationEntry = {
             role: "user",
-            text: event.transcript.trim(),
+            text: transcript,
             timestamp: Date.now(),
           };
           setConversationLog((prev) => [...prev, entry]);
@@ -178,6 +210,7 @@ export function useRealtimeInterview() {
           });
         }
         break;
+      }
 
       case "input_audio_buffer.speech_started":
         // User started speaking — AI should stop if it was speaking
