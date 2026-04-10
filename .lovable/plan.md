@@ -1,70 +1,55 @@
 
 
-## Plan: Multi-Layer Noise Rejection for Voice Agent
+## Plan: Mobile Responsiveness Fixes
 
-### Root Cause
+After reviewing the key pages, here are the mobile layout issues and fixes needed:
 
-The current approach relies only on two things: (1) a system prompt telling the AI to "ignore noise" and (2) OpenAI's server-side VAD threshold at 0.7. This is insufficient because:
+### 1. Dashboard (`src/pages/Dashboard.tsx`)
 
-- **VAD still triggers** on loud coughs, door slams, or nearby speech — threshold 0.7 isn't high enough for noisy environments
-- **Whisper still transcribes noise** — even if VAD triggers on a cough, Whisper produces a transcription like "Hmm" or "Yeah" or gibberish, and the model responds to it
-- **No client-side filtering** — every transcription, no matter how short or incoherent, gets saved to the conversation log and DB, polluting the transcript
+**Problems:**
+- Interview list items (line 167) cram score, badge, download button, and "View" link into one row — overflows on mobile
+- Nav has no mobile menu (links hidden below `md` breakpoint with no hamburger)
+- "New Interview" CTA button text is too large on small screens
 
-We need a **3-layer defense**: client-side audio processing → stricter VAD → client-side transcript filtering.
+**Fixes:**
+- Stack interview list items vertically on mobile: role/date on top, score + actions below
+- Add a mobile-friendly nav with hamburger or simplified links
+- Scale down CTA button padding/text on mobile (`text-base px-6 py-3 sm:text-lg sm:px-8 sm:py-4`)
 
-### Changes
+### 2. Live Interview (`src/pages/interview/LiveInterview.tsx`)
 
-#### 1. Client-Side Audio Noise Gate (`src/hooks/useRealtimeInterview.ts`)
+**Problems:**
+- Top overlay bar has 3 items in a row (timer, filler/wpm stats, role badge) — wraps awkwardly on narrow screens
+- Interviewer avatar is fixed at `h-36 w-36` — too large on small phones, leaves little room for transcript
+- Webcam self-view circle at `bottom-24 right-5` overlaps with controls on short screens
+- Transcript area `max-w-xl` + controls don't adapt to very small screens
 
-Before sending microphone audio to WebRTC, run it through a Web Audio API processing chain:
+**Fixes:**
+- Make top bar wrap-friendly: stack timer left, role right, analytics below on mobile
+- Scale avatar: `h-24 w-24 sm:h-36 sm:w-36`
+- Move webcam self-view higher or smaller on mobile: `h-[80px] w-[80px] sm:h-[120px] sm:w-[120px]`
+- Reduce transcript padding and max-height on mobile
 
-- **Noise gate via `createDynamicsCompressor`** — suppress audio below a volume threshold so quiet background sounds never reach OpenAI
-- **High-pass filter at 85Hz** — remove low-frequency rumble (AC units, traffic, fans)
-- **The processed stream** replaces the raw mic stream on the PeerConnection
+### 3. Report Page (`src/pages/Report.tsx`)
 
-This means OpenAI never even *hears* quiet background noise.
+**Problems:**
+- Overall score card (line 364-395): grade + score bars in `md:flex-row` — fine, but the `text-7xl` grade is huge on mobile
+- Score mini-cards grid `sm:grid-cols-3 lg:grid-cols-6` — on very small screens, single column cards are too tall
+- "How We Scored You" rubric items have dense layouts that don't breathe on mobile
+- Market insights salary numbers `text-2xl` are fine but the grid spacing is tight
+- Debrief stats (line 389) use `gap-8` which overflows on narrow phones
 
-#### 2. Increase VAD Threshold & Eagerness (`supabase/functions/realtime-session-token/index.ts`)
-
-- `threshold`: 0.7 → **0.85** (only clear, loud speech triggers)
-- `silence_duration_ms`: 1000 → **1200** (waits longer to confirm user stopped)
-- `prefix_padding_ms`: 400 → **500** (captures more lead-in, reducing false starts)
-
-#### 3. Client-Side Transcript Filtering (`src/hooks/useRealtimeInterview.ts`)
-
-When a user transcription arrives (`conversation.item.input_audio_transcription.completed`), filter it before adding to the conversation:
-
-- **Discard if fewer than 3 words** — single words like "Hmm", "Uh", cough transcriptions get dropped
-- **Discard if it matches a noise pattern** — regex for common noise transcriptions: "hmm", "uh huh", "mm", "yeah", "(laughing)", "(coughing)", "[inaudible]", etc.
-- **Only save clean, intentional speech** to the conversation log and database
-
-#### 4. Reinforce Prompt with Explicit Ignore List (`supabase/functions/realtime-session-token/index.ts`)
-
-Add an explicit list of transcriptions to never respond to:
-
-```
-TRANSCRIPTIONS TO SILENTLY IGNORE (do NOT respond, do NOT acknowledge):
-- Single words: "Hmm", "Uh", "Mm", "Yeah", "Ok", "Ah"
-- Sound descriptions: "(laughing)", "(coughing)", "[inaudible]", "(background noise)"
-- Fragments under 3 words that don't form a question or statement
-- Any text that appears to be someone else speaking in the background
-If you're unsure whether the candidate is speaking to you, WAIT silently. Do NOT say "Could you repeat that?" or "I didn't catch that."
-```
+**Fixes:**
+- Scale grade text: `text-5xl sm:text-7xl`
+- Score mini-cards: `grid-cols-2 sm:grid-cols-3 lg:grid-cols-6`
+- Add `text-sm` base size adjustments to rubric items on mobile
+- Debrief stats: `gap-4 sm:gap-8` and allow wrapping with `flex-wrap`
 
 ### Files Changed
 
-| File | Change |
-|------|--------|
-| `src/hooks/useRealtimeInterview.ts` | Add Web Audio noise gate + high-pass filter before WebRTC; add transcript filtering logic to discard noise transcriptions |
-| `supabase/functions/realtime-session-token/index.ts` | Raise VAD to 0.85/1200ms/500ms; add explicit ignore list to prompt |
-
-### What This Achieves
-
-| Layer | What It Blocks |
-|-------|---------------|
-| Audio noise gate (client) | Quiet sounds never reach OpenAI — fans, typing, distant speech |
-| High-pass filter (client) | Low rumble from AC, traffic, vibrations |
-| Higher VAD threshold (server) | Medium-volume sounds like coughs, door closing |
-| Transcript filter (client) | Even if Whisper transcribes noise, short/gibberish text is discarded |
-| Prompt ignore list (server) | Last resort — model explicitly told to ignore specific patterns |
+| File | Changes |
+|------|---------|
+| `src/pages/Dashboard.tsx` | Responsive interview list items, mobile nav links, scaled CTA button |
+| `src/pages/interview/LiveInterview.tsx` | Responsive top bar, smaller avatar on mobile, scaled webcam, adjusted transcript area |
+| `src/pages/Report.tsx` | Responsive grade size, 2-col score grid on mobile, breathing room in rubric, wrapping debrief stats |
 
