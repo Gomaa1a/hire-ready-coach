@@ -386,19 +386,19 @@ const LiveInterview = () => {
             <p className="mt-2 text-sm text-white/50">Great work! Let's see how you did.</p>
           </div>
 
-          <div className="flex items-center gap-8">
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8">
             <div className="text-center">
-              <p className="text-2xl font-bold text-white tabular-nums">{getInterviewDuration()}</p>
+              <p className="text-xl sm:text-2xl font-bold text-white tabular-nums">{getInterviewDuration()}</p>
               <p className="text-xs text-white/40 mt-1">Duration</p>
             </div>
             <div className="h-8 w-px bg-white/10" />
             <div className="text-center">
-              <p className="text-2xl font-bold text-white tabular-nums">{topicsDiscussed}</p>
+              <p className="text-xl sm:text-2xl font-bold text-white tabular-nums">{topicsDiscussed}</p>
               <p className="text-xs text-white/40 mt-1">Responses</p>
             </div>
             <div className="h-8 w-px bg-white/10" />
             <div className="text-center">
-              <p className={`text-2xl font-bold tabular-nums ${analytics.fillerRate === "high" ? "text-red-400" : analytics.fillerRate === "moderate" ? "text-amber-400" : "text-green-400"}`}>
+              <p className={`text-xl sm:text-2xl font-bold tabular-nums ${analytics.fillerRate === "high" ? "text-red-400" : analytics.fillerRate === "moderate" ? "text-amber-400" : "text-green-400"}`}>
                 {analytics.fillerCount}
               </p>
               <p className="text-xs text-white/40 mt-1">Fillers</p>
