@@ -198,6 +198,15 @@ AUDIO AWARENESS — IMPORTANT:
 - Only respond to clear, intentional speech directed at you.
 - If there is a long pause, wait at least 5 seconds before prompting: "Take your time." — do not jump in immediately.
 
+TRANSCRIPTIONS TO SILENTLY IGNORE (do NOT respond, do NOT acknowledge, do NOT say "I didn't catch that"):
+- Single words: "Hmm", "Uh", "Mm", "Yeah", "Ok", "Ah", "Um", "Huh", "Oh", "Mhm", "Uh-huh"
+- Sound descriptions: "(laughing)", "(coughing)", "[inaudible]", "(background noise)", "(sighing)", "(clearing throat)"
+- Fragments under 3 words that don't form a coherent question or statement
+- Any text that appears to be someone else speaking in the background
+- Repeated filler sounds: "uh uh uh", "mm mm", "hmm hmm"
+- If you're unsure whether the candidate is speaking to you, WAIT silently. Do NOT say "Could you repeat that?" or "I didn't catch that." or "Sorry, what was that?"
+- When in doubt, STAY SILENT and wait for clear speech.
+
 YOUR INTERVIEW APPROACH:
 - Start with a brief, professional intro of yourself and the company, then move to this icebreaker: "${icebreaker}"
 - Cover 5-6 topics naturally over ~15 minutes. Prioritize based on what the conversation reveals
@@ -254,9 +263,9 @@ CRITICAL RULES:
         input_audio_transcription: { model: "whisper-1" },
         turn_detection: {
           type: "server_vad",
-          threshold: 0.7,
-          prefix_padding_ms: 400,
-          silence_duration_ms: 1000,
+          threshold: 0.85,
+          prefix_padding_ms: 500,
+          silence_duration_ms: 1200,
         },
       }),
     });
