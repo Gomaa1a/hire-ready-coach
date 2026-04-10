@@ -93,18 +93,18 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background">
       <nav className="sticky top-0 z-50 border-b-2 border-ink bg-background/95 backdrop-blur">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-4 sm:gap-8">
             <Link to="/dashboard"><Logo /></Link>
-            <div className="hidden items-center gap-6 md:flex">
-              <Link to="/dashboard" className="font-body text-sm font-semibold text-foreground">Dashboard</Link>
-              <Link to="/interview/new" className="font-body text-sm font-semibold text-muted-foreground hover:text-foreground">New Interview</Link>
+            <div className="flex items-center gap-3 sm:gap-6">
+              <Link to="/dashboard" className="font-body text-xs sm:text-sm font-semibold text-foreground">Dashboard</Link>
+              <Link to="/interview/new" className="font-body text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground">New</Link>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className={`neo-badge ${credits === 0 ? "bg-coral text-coral-foreground" : "bg-primary text-primary-foreground"}`}>
-              {credits} credits
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className={`neo-badge text-xs sm:text-sm ${credits === 0 ? "bg-coral text-coral-foreground" : "bg-primary text-primary-foreground"}`}>
+              {credits}
             </div>
-            <button onClick={handleSignOut} className="neo-btn bg-background text-foreground text-sm">Sign out</button>
+            <button onClick={handleSignOut} className="neo-btn bg-background text-foreground text-xs sm:text-sm">Sign out</button>
           </div>
         </div>
       </nav>
@@ -120,10 +120,11 @@ const Dashboard = () => {
           </div>
           <Link
             to="/interview/new"
-            className="neo-btn bg-primary text-primary-foreground text-lg px-8 py-4 shadow-[6px_6px_0_0_hsl(var(--ink))] hover:shadow-[2px_2px_0_0_hsl(var(--ink))] hover:translate-x-1 hover:translate-y-1 transition-all animate-pulse-slow flex items-center gap-2 font-extrabold"
+            className="neo-btn bg-primary text-primary-foreground text-base px-6 py-3 sm:text-lg sm:px-8 sm:py-4 shadow-[6px_6px_0_0_hsl(var(--ink))] hover:shadow-[2px_2px_0_0_hsl(var(--ink))] hover:translate-x-1 hover:translate-y-1 transition-all animate-pulse-slow flex items-center gap-2 font-extrabold"
           >
             <Mic className="h-5 w-5" />
-            New Interview
+            <span className="hidden sm:inline">New Interview</span>
+            <span className="sm:hidden">New</span>
           </Link>
         </div>
 
@@ -164,20 +165,20 @@ const Dashboard = () => {
               ) : (
                 <div className="space-y-3">
                   {completedInterviews.map((interview) => (
-                    <div key={interview.id} className="flex items-center justify-between rounded-xl border-2 border-ink bg-background p-4">
+                    <div key={interview.id} className="flex flex-col gap-3 rounded-xl border-2 border-ink bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <div className="font-heading font-bold">{interview.role}</div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="font-heading font-bold text-sm sm:text-base">{interview.role}</div>
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
                           <span>{interview.level}</span>
                           <span>•</span>
                           <span>{new Date(interview.created_at).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="neo-badge bg-success/20 text-success">Done</span>
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <span className="neo-badge bg-success/20 text-success text-xs">Done</span>
                         {reports[interview.id] !== undefined && (
                           <>
-                            <span className={`font-heading text-lg font-bold ${getScoreColor(reports[interview.id].overall_score)}`}>
+                            <span className={`font-heading text-base sm:text-lg font-bold ${getScoreColor(reports[interview.id].overall_score)}`}>
                               {reports[interview.id].overall_score}%
                             </span>
                             <DownloadShareCard
@@ -190,7 +191,7 @@ const Dashboard = () => {
                             />
                           </>
                         )}
-                        <Link to={`/report/${interview.id}`} className="flex items-center gap-1 font-semibold text-primary hover:underline">
+                        <Link to={`/report/${interview.id}`} className="flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
                           View <ArrowRight className="h-4 w-4" />
                         </Link>
                       </div>
