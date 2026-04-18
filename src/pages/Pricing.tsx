@@ -1,10 +1,13 @@
 import { Link } from "react-router-dom";
 import Logo from "@/components/Logo";
-import { Check, Lock } from "lucide-react";
+import { Check, Lock, Loader2 } from "lucide-react";
+import { usePaddleCheckout } from "@/hooks/usePaddleCheckout";
+import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
 const plans = [
   {
     name: "Trial",
+    priceId: "trial_pack_onetime",
     price: "$3",
     period: "one-time",
     credits: "1 interview",
@@ -13,6 +16,7 @@ const plans = [
   },
   {
     name: "Starter",
+    priceId: "starter_pack_onetime",
     price: "$9",
     period: "one-time",
     credits: "+5 interviews",
@@ -21,6 +25,7 @@ const plans = [
   },
   {
     name: "Pro",
+    priceId: "pro_pack_onetime",
     price: "$19",
     period: "one-time",
     credits: "+15 interviews",
@@ -29,6 +34,7 @@ const plans = [
   },
   {
     name: "Scale",
+    priceId: "scale_monthly",
     price: "$29",
     period: "/month",
     credits: "30 interviews / month",
@@ -38,13 +44,11 @@ const plans = [
 ];
 
 const Pricing = () => {
-  const handleBuy = (plan: string) => {
-    // TODO: Integrate with Stripe
-    console.log(`Buying ${plan}`);
-  };
+  const { openCheckout, loading } = usePaddleCheckout();
 
   return (
     <div className="min-h-screen bg-background">
+      <PaymentTestModeBanner />
       {/* Navbar */}
       <nav className="sticky top-0 z-50 border-b-2 border-ink bg-background/95 backdrop-blur">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
@@ -57,13 +61,13 @@ const Pricing = () => {
         </div>
       </nav>
 
-      <main className="container mx-auto max-w-5xl px-4 py-12">
+      <main className="container mx-auto max-w-6xl px-4 py-12">
         <div className="mb-12 text-center">
           <h1 className="mb-4 font-heading text-4xl font-extrabold">Buy More Credits</h1>
           <p className="text-muted-foreground">Choose a plan that works for you. All purchases are one-time unless stated.</p>
         </div>
 
-        <div className="mb-12 grid gap-6 md:grid-cols-3">
+        <div className="mb-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((plan) => (
             <div
               key={plan.name}
@@ -91,12 +95,13 @@ const Pricing = () => {
                 ))}
               </ul>
               <button
-                onClick={() => handleBuy(plan.name)}
-                className={`neo-btn w-full text-center ${
+                onClick={() => openCheckout(plan.priceId)}
+                disabled={loading}
+                className={`neo-btn w-full text-center disabled:opacity-50 ${
                   plan.highlight ? "bg-lime text-lime-foreground" : "bg-primary text-primary-foreground"
                 }`}
               >
-                Buy Now →
+                {loading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Buy Now →"}
               </button>
             </div>
           ))}
@@ -104,7 +109,7 @@ const Pricing = () => {
 
         <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Lock className="h-4 w-4" />
-          Payments processed securely by Stripe
+          Secure payments powered by Paddle
         </div>
       </main>
     </div>
