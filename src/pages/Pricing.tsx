@@ -1,10 +1,13 @@
 import { Link } from "react-router-dom";
 import Logo from "@/components/Logo";
-import { Check, Lock } from "lucide-react";
+import { Check, Lock, Loader2 } from "lucide-react";
+import { usePaddleCheckout } from "@/hooks/usePaddleCheckout";
+import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
 const plans = [
   {
     name: "Trial",
+    priceId: "trial_pack_onetime",
     price: "$3",
     period: "one-time",
     credits: "1 interview",
@@ -13,6 +16,7 @@ const plans = [
   },
   {
     name: "Starter",
+    priceId: "starter_pack_onetime",
     price: "$9",
     period: "one-time",
     credits: "+5 interviews",
@@ -21,6 +25,7 @@ const plans = [
   },
   {
     name: "Pro",
+    priceId: "pro_pack_onetime",
     price: "$19",
     period: "one-time",
     credits: "+15 interviews",
@@ -29,6 +34,7 @@ const plans = [
   },
   {
     name: "Scale",
+    priceId: "scale_monthly",
     price: "$29",
     period: "/month",
     credits: "30 interviews / month",
@@ -38,10 +44,7 @@ const plans = [
 ];
 
 const Pricing = () => {
-  const handleBuy = (plan: string) => {
-    // TODO: Integrate with Stripe
-    console.log(`Buying ${plan}`);
-  };
+  const { openCheckout, loading } = usePaddleCheckout();
 
   return (
     <div className="min-h-screen bg-background">
